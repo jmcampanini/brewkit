@@ -1,0 +1,459 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"strings"
+
+	"github.com/jmcampanini/brewkit/internal/brew"
+	"github.com/jmcampanini/brewkit/internal/config"
+	"github.com/jmcampanini/brewkit/internal/parse"
+	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/ui"
+)
+
+// brewerFactory is overridden in tests to inject a Fake brewer.
+var brewerFactory = func() brew.Brewer { return brew.NewExec() }
+
+func loadEffectiveConfig() (config.Config, []string, error) {
+	cfg, err := config.Load(flags.configPath)
+	if err != nil {
+		return config.Config{}, nil, err
+	}
+	resolved, err := profile.Resolve(cfg, flags.profiles)
+	if err != nil {
+		return config.Config{}, nil, err
+	}
+	return cfg, resolved, nil
+}
+
+func newPrinter() *ui.Printer {
+	level := ui.LevelNormal
+	switch {
+	case flags.verbose:
+		level = ui.LevelVerbose
+	case flags.quiet:
+		level = ui.LevelQuiet
+	}
+	return ui.New(os.Stdout, os.Stderr, level, isTerminal(os.Stdout), flags.dryRun)
+}
+
+// runApply is the shared implementation for `brewkit tap|brew|head|cask`.
+func runApply(ctx context.Context, t profile.Kind, args []string) error {
+	cfg, profiles, err := loadEffectiveConfig()
+	if err != nil {
+		return err
+	}
+
+	rc := &runContext{
+		ctx:      ctx,
+		brewer:   brewerFactory(),
+		printer:  newPrinter(),
+		dryRun:   flags.dryRun,
+		failFast: cfg.FailFast,
+	}
+	defer rc.printer.Footer()
+
+	rc.printer.Group(t.String())
+
+	var filter string
+	if len(args) == 1 {
+		filter = args[0]
+	}
+
+	var (
+		matched  bool
+		failures []error
+	)
+	for _, prof := range profiles {
+		path := profile.PathFor(cfg.Dir, t, prof)
+		_, statErr := os.Stat(path)
+		if errors.Is(statErr, fs.ErrNotExist) {
+			if filter == "" {
+				rc.printer.Notice(fmt.Sprintf("%s: no %s, skipping", prof, t.FilenamePrefix()))
+			}
+			continue
+		}
+		if statErr != nil {
+			return fmt.Errorf("stat %s: %w", path, statErr)
+		}
+		f, err := parse.Parse(path, t)
+		if err != nil {
+			return err
+		}
+		// Surface LineUnknown lines as failures rather than silently
+		// skipping them — `f.Entries()` filters to LineEntry only, so a
+		// malformed line would otherwise produce a clean exit and a
+		// partially applied profile.
+		for _, l := range f.Lines {
+			if l.Kind != parse.LineUnknown {
+				continue
+			}
+			err := fmt.Errorf("%s:%d: invalid %s entry: %s", path, l.Number, t, l.Raw)
+			rc.printer.Error(path, fmt.Sprintf("line %d: invalid entry", l.Number), l.Raw)
+			if rc.failFast {
+				return err
+			}
+			failures = append(failures, err)
+		}
+		for _, e := range f.Entries() {
+			if filter != "" {
+				if !entryMatches(e, filter) {
+					continue
+				}
+				matched = true
+			}
+			if err := rc.apply(t, e); err != nil {
+				if rc.failFast {
+					return err
+				}
+				failures = append(failures, err)
+			}
+		}
+	}
+
+	if filter != "" && !matched {
+		return fmt.Errorf("%q not found in any active profile %s", filter, t)
+	}
+
+	if t == profile.KindCask {
+		rc.printer.RestartAppsNotice(rc.restartApps)
+	}
+
+	if len(failures) > 0 {
+		// errors.Join preserves every failure for errors.Is/As walking
+		// via Go 1.20+'s Unwrap() []error, and prints them
+		// newline-separated after the "N op(s) failed:" prefix.
+		return fmt.Errorf("%d %s operation(s) failed: %w",
+			len(failures), t, errors.Join(failures...))
+	}
+	return nil
+}
+
+func entryMatches(e *parse.Entry, filter string) bool {
+	return e.Name == filter || shortName(e.Name) == filter
+}
+
+// shortName returns the substring after the final '/' in name, or name
+// itself if no '/' is present. Qualified Brewfile entries like
+// "user/tap/freeze" must match the short name "freeze" that brew uses
+// in its state output.
+func shortName(name string) string {
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
+// formulaState looks up the FormulaState for an entry, falling back to
+// the short name when the entry uses a fully qualified `user/tap/name`.
+func (rc *runContext) formulaState(name string) brew.FormulaState {
+	if fs, ok := rc.state.Formulas[name]; ok {
+		return fs
+	}
+	if short := shortName(name); short != name {
+		if fs, ok := rc.state.Formulas[short]; ok {
+			return fs
+		}
+	}
+	return brew.FormulaState{}
+}
+
+// caskState looks up CaskState with the same short-name fallback.
+func (rc *runContext) caskState(name string) brew.CaskState {
+	if cs, ok := rc.state.Casks[name]; ok {
+		return cs
+	}
+	if short := shortName(name); short != name {
+		if cs, ok := rc.state.Casks[short]; ok {
+			return cs
+		}
+	}
+	return brew.CaskState{}
+}
+
+type runContext struct {
+	ctx      context.Context
+	brewer   brew.Brewer
+	printer  *ui.Printer
+	state    *brew.State
+	dryRun   bool
+	failFast bool
+
+	restartApps []string
+	headSeen    map[string]struct{} // names already processed by applyHead this run
+}
+
+// ensureState lazily fetches the bulk Homebrew state on the first call.
+// The two things this laziness enables:
+//  1. `brewkit head` never invokes State at all (applyHead uses only
+//     per-formula probes and skips the ensureState call).
+//  2. A run that finds no matching profile files — runApply stats each
+//     path and `continue`s on ENOENT before ever entering apply* — can
+//     complete without shelling out to brew, which matters on machines
+//     where brew is unavailable or transiently broken.
+func (rc *runContext) ensureState() error {
+	if rc.state != nil {
+		return nil
+	}
+	state, err := rc.brewer.State(rc.ctx)
+	if err != nil {
+		return fmt.Errorf("brew state: %w", err)
+	}
+	rc.state = state
+	return nil
+}
+
+// cacheFormula records a formula's post-action state under both its
+// fully qualified name (e.g. user/tap/foo) and its short name (foo) so a
+// later profile that references the same formula via either form sees
+// the install and skips it.
+func (rc *runContext) cacheFormula(name string, fs brew.FormulaState) {
+	rc.state.Formulas[name] = fs
+	if short := shortName(name); short != name {
+		rc.state.Formulas[short] = fs
+	}
+}
+
+func (rc *runContext) cacheCask(name string, cs brew.CaskState) {
+	rc.state.Casks[name] = cs
+	if short := shortName(name); short != name {
+		rc.state.Casks[short] = cs
+	}
+}
+
+func (rc *runContext) apply(t profile.Kind, e *parse.Entry) error {
+	switch t {
+	case profile.KindTap:
+		return rc.applyTap(e)
+	case profile.KindBrew:
+		return rc.applyBrew(e)
+	case profile.KindHead:
+		return rc.applyHead(e)
+	case profile.KindCask:
+		return rc.applyCask(e)
+	}
+	return fmt.Errorf("unknown profile kind %d", t)
+}
+
+func (rc *runContext) applyTap(e *parse.Entry) error {
+	if err := rc.ensureState(); err != nil {
+		return err
+	}
+	if rc.state.Taps[e.Name] {
+		rc.printer.Item(ui.SymUpToDate, e.Name, "")
+		return nil
+	}
+	if rc.dryRun {
+		rc.printer.Item(ui.SymAdded, e.Name, "")
+		rc.state.Taps[e.Name] = true
+		return nil
+	}
+	res, err := rc.brewer.Tap(rc.ctx, e.Name, e.Extra)
+	if err != nil {
+		rc.printer.Error(e.Name, "tap failed", res.Output)
+		return err
+	}
+	rc.printer.Item(ui.SymAdded, e.Name, "")
+	rc.printer.Verbose(res.Output)
+	rc.state.Taps[e.Name] = true
+	return nil
+}
+
+func (rc *runContext) applyBrew(e *parse.Entry) error {
+	if err := rc.ensureState(); err != nil {
+		return err
+	}
+	fs := rc.formulaState(e.Name)
+	switch {
+	case !fs.Installed:
+		if rc.dryRun {
+			rc.printer.Item(ui.SymAdded, e.Name, "")
+			// Project the install into the cache so a later layered
+			// profile referencing the same formula sees it as up-to-date
+			// in the preview, matching real-run behavior.
+			rc.cacheFormula(e.Name, brew.FormulaState{Installed: true, Version: e.Name})
+			return nil
+		}
+		res, err := rc.brewer.BrewInstall(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "install failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymAdded, e.Name, "")
+		rc.printer.Verbose(res.Output)
+		rc.cacheFormula(e.Name, brew.FormulaState{Installed: true, Version: res.To})
+	case fs.Outdated:
+		if rc.dryRun {
+			rc.printer.Item(ui.SymUpgraded, e.Name, fs.Version+" → "+fs.OutdatedTo)
+			rc.cacheFormula(e.Name, brew.FormulaState{Installed: true, Version: fs.OutdatedTo})
+			return nil
+		}
+		res, err := rc.brewer.BrewUpgrade(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "upgrade failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymUpgraded, e.Name, fs.Version+" → "+fs.OutdatedTo)
+		rc.printer.Verbose(res.Output)
+		rc.cacheFormula(e.Name, brew.FormulaState{Installed: true, Version: fs.OutdatedTo})
+	default:
+		rc.printer.Item(ui.SymUpToDate, e.Name, "("+fs.Version+")")
+	}
+	return nil
+}
+
+// applyHead does NOT call ensureState — HEAD operations are entirely
+// per-formula (HeadInstalledSHA / HeadLatestSHA), so the bulk
+// `brew tap`/`brew list`/`brew outdated` probes from State are wasted
+// work and would also abort the run if any unrelated probe (e.g. a
+// flaky `brew outdated --cask`) failed.
+func (rc *runContext) applyHead(e *parse.Entry) (err error) {
+	if rc.headSeen == nil {
+		rc.headSeen = map[string]struct{}{}
+	}
+	// Same formula listed in two layered profiles (under either qualified
+	// or short form) is reported once. Key on shortName so e.g.
+	// "homebrew/core/tmux" and "tmux" collide. We mark the entry as seen
+	// only AFTER the operation succeeds; if the first invocation errors
+	// in fail_fast=false mode, a later profile still gets a chance to
+	// retry instead of silently being reported as "already processed".
+	key := shortName(e.Name)
+	if _, ok := rc.headSeen[key]; ok {
+		rc.printer.Item(ui.SymUpToDate, e.Name, "(already processed)")
+		return nil
+	}
+	defer func() {
+		if err == nil {
+			rc.headSeen[key] = struct{}{}
+		}
+	}()
+
+	installedSHA, asHead, installed, err := rc.brewer.HeadInstalledSHA(rc.ctx, e.Name)
+	if err != nil {
+		rc.printer.Error(e.Name, "head install check failed", err.Error())
+		return err
+	}
+
+	switch {
+	case !installed:
+		// Confirm the formula actually exposes a HEAD source before
+		// trying to install it. Without this guard a Headfile entry for
+		// a formula whose upstream dropped HEAD support would abort the
+		// run on the first such item.
+		_, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "head latest check failed", err.Error())
+			return err
+		}
+		if !hasHead {
+			rc.printer.Item(ui.SymUpToDate, e.Name, "(no HEAD source)")
+			return nil
+		}
+		if rc.dryRun {
+			rc.printer.Item(ui.SymAdded, e.Name, "(HEAD)")
+			return nil
+		}
+		res, err := rc.brewer.HeadInstall(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "head install failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymAdded, e.Name, res.To)
+		rc.printer.Verbose(res.Output)
+	case installed && !asHead:
+		// Same hasHead guard as the !installed branch — if upstream
+		// dropped HEAD support we must not try to reinstall.
+		_, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "head latest check failed", err.Error())
+			return err
+		}
+		if !hasHead {
+			rc.printer.Item(ui.SymUpToDate, e.Name, "(no HEAD source)")
+			return nil
+		}
+		if rc.dryRun {
+			rc.printer.Item(ui.SymUpgraded, e.Name, "(installed → HEAD)")
+			return nil
+		}
+		res, err := rc.brewer.HeadReinstall(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "head reinstall failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymUpgraded, e.Name, "installed → "+res.To)
+		rc.printer.Verbose(res.Output)
+	default:
+		// Installed as HEAD; compare to latest.
+		latestSHA, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "head latest check failed", err.Error())
+			return err
+		}
+		if !hasHead {
+			rc.printer.Item(ui.SymUpToDate, e.Name, "(no HEAD source)")
+			return nil
+		}
+		if latestSHA == installedSHA {
+			rc.printer.Item(ui.SymUpToDate, e.Name, "(HEAD-"+installedSHA+")")
+			return nil
+		}
+		if rc.dryRun {
+			rc.printer.Item(ui.SymUpgraded, e.Name, "HEAD-"+installedSHA+" → HEAD-"+latestSHA)
+			return nil
+		}
+		res, err := rc.brewer.HeadReinstall(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "head reinstall failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymUpgraded, e.Name, "HEAD-"+installedSHA+" → HEAD-"+latestSHA)
+		rc.printer.Verbose(res.Output)
+	}
+	return nil
+}
+
+func (rc *runContext) applyCask(e *parse.Entry) error {
+	if err := rc.ensureState(); err != nil {
+		return err
+	}
+	cs := rc.caskState(e.Name)
+	switch {
+	case !cs.Installed:
+		if rc.dryRun {
+			rc.printer.Item(ui.SymAdded, e.Name, "")
+			rc.cacheCask(e.Name, brew.CaskState{Installed: true, Version: e.Name})
+			return nil
+		}
+		res, err := rc.brewer.CaskInstall(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "cask install failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymAdded, e.Name, "")
+		rc.printer.Verbose(res.Output)
+		rc.cacheCask(e.Name, brew.CaskState{Installed: true, Version: res.To})
+	case cs.Outdated:
+		if rc.dryRun {
+			rc.printer.Item(ui.SymUpgraded, e.Name, cs.Version+" → "+cs.OutdatedTo)
+			rc.cacheCask(e.Name, brew.CaskState{Installed: true, Version: cs.OutdatedTo})
+			return nil
+		}
+		res, err := rc.brewer.CaskUpgrade(rc.ctx, e.Name)
+		if err != nil {
+			rc.printer.Error(e.Name, "cask upgrade failed", res.Output)
+			return err
+		}
+		rc.printer.Item(ui.SymUpgraded, e.Name, cs.Version+" → "+cs.OutdatedTo)
+		rc.printer.Verbose(res.Output)
+		rc.cacheCask(e.Name, brew.CaskState{Installed: true, Version: cs.OutdatedTo})
+		rc.restartApps = append(rc.restartApps, e.Name)
+	default:
+		rc.printer.Item(ui.SymUpToDate, e.Name, "("+cs.Version+")")
+	}
+	return nil
+}

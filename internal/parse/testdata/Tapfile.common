@@ -1,0 +1,6 @@
+# keep sorted alphabetically by tap name
+
+alpha-org/tap
+example/bravo https://github.com/example/bravo
+example/charlie https://github.com/example/charlie
+zulu-org/tap

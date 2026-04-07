@@ -1,0 +1,188 @@
+brewkit — multi-profile Homebrew manager
+========================================
+
+brewkit manages four file types per profile:
+
+  Brewfile.<profile>   Homebrew Bundle format: brew "name"
+  Caskfile.<profile>   one cask name per line
+  Headfile.<profile>   one HEAD-tracked formula per line
+  Tapfile.<profile>    one tap per line: <tap> [<url>]
+
+Multiple profiles may be active simultaneously. Their entries are
+applied in the order the profiles appear in the active list. The
+reserved profile "local" is automatically appended last when any
+*file.local exists in the configured directory; it is meant for
+machine-specific overrides and is gitignored by convention.
+
+
+Configuration
+-------------
+
+A brewkit.toml in the current working directory is loaded by default;
+pass --config <path> to use a different file. Running with no config
+falls back to defaults:
+
+  dir          = "."
+  profiles     = ["common"]
+  profiles_env = "BREWKIT_PROFILES"
+  fail_fast    = true
+
+Keys:
+  dir           Directory holding the *file.<profile> files.
+  profiles      Default active profile list.
+  profiles_env  Environment variable that overrides `profiles`.
+                Set to "" to disable env-based override entirely.
+                Read as a comma-separated list, whitespace tolerant.
+  fail_fast     Stop on first error (true) or report at end (false).
+
+Profile selection precedence (later wins, each level fully replaces
+the one below):
+
+  1. defaults
+  2. brewkit.toml `profiles`
+  3. env var named by `profiles_env`
+  4. --profile flags (repeatable)
+  5. local profile auto-appended if *file.local exists
+
+Print the effective config any time with:
+
+  brewkit config
+
+
+Commands
+--------
+
+  brewkit tap  [TAP]      Apply Tapfile entries.
+  brewkit brew [FORMULA]  Apply Brewfile entries.
+  brewkit head [FORMULA]  Apply Headfile entries (SHA-idempotent).
+  brewkit cask [CASK]     Apply Caskfile entries (greedy upgrades).
+  brewkit lint            Validate profile files.
+  brewkit config          Print effective config as TOML.
+  brewkit docs            Print this manual.
+
+Each apply command accepts an optional positional arg to scope the
+operation to a single item, looked up by name (full or short, after
+the last `/`) across the active profiles.
+
+Global flags:
+  --config PATH        explicit path to brewkit.toml
+  --profile NAME       repeatable; replaces config/env
+  --dry-run            compute changes without applying
+  -v, --verbose        stream raw brew output for every operation
+  -q, --quiet          suppress per-item stream; show errors + summary
+
+
+Output
+------
+
+Default output streams per-item changes followed by a one-line
+summary. Symbols:
+
+  +  added (newly installed)
+  ↑  upgraded (with old → new where available)
+  ✓  already up to date
+  ∘  notice (e.g. missing profile file, skipped)
+  ✗  error
+
+On any non-zero brew exit the captured stdout/stderr is printed in
+full regardless of verbosity.
+
+
+File formats
+------------
+
+Every file supports `# comment` lines, blank lines, and inline
+trailing `# description` comments. Files are read regardless of
+sort order; alphabetical sorting is enforced by `brewkit lint`.
+
+Brewfile.<profile> — Homebrew Bundle subset.
+  brew "name"
+  brew "name"            # description
+  brew "user/tap/name"   # description for fully qualified entries
+
+  Only `brew "..."` and `brew "..." # description` are recognized.
+  Other Bundle directives (tap, cask, mas, vscode) are reported as
+  unknown shape by `brewkit lint`. Use Tapfile/Caskfile instead.
+
+Caskfile.<profile>, Headfile.<profile>
+  name
+  name                       # description
+
+  One token per line. Headfile may use fully qualified
+  `user/tap/formula` names.
+
+Tapfile.<profile>
+  tap-name
+  tap-name <url>
+  tap-name <url>             # description
+
+  The URL is optional; supply it for taps Homebrew cannot locate
+  via its default index.
+
+
+Editing profile files
+---------------------
+
+Profile files are designed to be edited by humans AND by LLMs.
+Conventions enforced by `brewkit lint`:
+
+  1. Each entry on its own line, alphabetically sorted within its
+     section. Sections are delimited by blank lines; comment-only
+     lines (including HACK headers) are part of the surrounding
+     section, not delimiters.
+  2. Trailing description comments use the format `name  # text`
+     with at least two spaces before the `#`.
+  3. Every `#` comment marker is followed by exactly one space:
+     `# text`, not `#text` or `#  text`.
+  4. Brewfile/Caskfile/Headfile entries should carry a trailing
+     description. Tapfile entries are exempt.
+  5. No trailing whitespace and no consecutive blank lines.
+
+
+brewkit lint rules
+------------------
+
+Each rule has a stable ID for reference in error messages.
+
+  sort-order              Entries within a section are alphabetically
+                          sorted by name.
+  trailing-description    Each entry should have a trailing
+                          # description (skipped for Tapfile).
+  comment-space           # markers must be followed by exactly one
+                          space.
+  inline-comment-gap      Trailing inline comments must be preceded
+                          by at least two spaces.
+  no-consecutive-blanks   At most one blank line in a row.
+  no-trailing-whitespace  No trailing spaces or tabs on any line.
+  known-entry-shape       Each non-blank, non-comment line parses
+                          as a valid entry for its file type.
+
+`brewkit lint` exits non-zero when any violations are found.
+`-v` includes the offending line content; `-q` prints only the
+final summary count.
+
+
+HEAD formula handling
+---------------------
+
+`brewkit head` uses the same SHA-idempotency strategy as the
+underlying brew-head-sync.sh:
+
+  1. If the formula is not installed, install with `brew install
+     --head --formula <name>` (HOMEBREW_NO_GITHUB_API=1).
+  2. If installed but not as HEAD (the linked keg version is not
+     `HEAD-...`), reinstall as HEAD.
+  3. If installed as HEAD, fetch the latest available HEAD short
+     SHA from the formula's HEAD source repository and compare
+     against the installed SHA. Reinstall only when they differ.
+
+This avoids slow rebuilds when the upstream repo has not moved.
+
+
+Cask handling
+-------------
+
+`brewkit cask` upgrades casks with `--greedy`, matching the
+existing dotfiles convention. Upgraded casks are listed in a
+"Restart these apps to apply upgrades" notice at the end of
+the run.

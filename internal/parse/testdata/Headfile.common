@@ -1,0 +1,7 @@
+# keep each section sorted alphabetically
+
+# HACK: alpha is on HEAD until upstream tags v2 with the missing fix
+alpha                  # Sample HEAD formula
+delta                  # Sample HEAD formula
+example/tap/bravo      # Qualified HEAD formula
+example/tap/charlie    # Another qualified HEAD formula

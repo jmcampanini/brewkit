@@ -1,0 +1,9 @@
+# Claude / Codex tooling state
+.claude/
+.claude-plans/
+.claude-sandbox/
+.codex-review/
+
+# Local build artifacts
+/brewkit
+/dist/

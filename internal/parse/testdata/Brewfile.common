@@ -1,0 +1,16 @@
+# keep each section sorted alphabetically
+
+# packages
+brew "alpha"                       # First sample formula
+brew "bravo"                       # Second sample formula
+brew "charlie"                     # Third sample formula
+brew "delta"                       # Fourth sample formula
+brew "echo"                        # Fifth sample formula
+brew "example/tap/foxtrot"         # Fully-qualified sample
+brew "example/tap/golf"            # Another fully-qualified sample
+# HACK: pre-install hotel because india's HEAD build needs it on first run
+brew "hotel"                       # Sample formula with HACK preamble
+brew "india"                       # Sample formula
+brew "juliet"                      # Sample formula
+brew "kilo"                        # Sample formula
+brew "lima"                        # Sample formula
