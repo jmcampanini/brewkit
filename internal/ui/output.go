@@ -28,6 +28,8 @@ const (
 	SymNotice
 )
 
+const detailIndent = "    "
+
 type Summary struct {
 	Added    int
 	Upgraded int
@@ -37,23 +39,17 @@ type Summary struct {
 }
 
 type Printer struct {
-	out     io.Writer
-	err     io.Writer
-	level   Level
-	dryRun  bool
-	color   bool
-	summary Summary
+	out         io.Writer
+	err         io.Writer
+	level       Level
+	dryRun      bool
+	color       bool
+	summary     Summary
+	bodyWritten bool // any non-summary line was written
 }
 
 func New(out, errOut io.Writer, level Level, color, dryRun bool) *Printer {
 	return &Printer{out: out, err: errOut, level: level, dryRun: dryRun, color: color}
-}
-
-func (p *Printer) Group(name string) {
-	if p.level == LevelQuiet {
-		return
-	}
-	_, _ = fmt.Fprintln(p.out, p.styleHeader(name))
 }
 
 func (p *Printer) Item(sym Symbol, name, detail string) {
@@ -72,14 +68,14 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 		return
 	}
 	prefix := p.symbol(sym)
-	line := "  " + prefix + " " + name
+	line := prefix + " " + name
 	if detail != "" {
 		line += " " + p.styleDim(detail)
 	}
 	if p.dryRun && sym != SymUpToDate && sym != SymError {
 		line += " " + p.styleDim("(dry-run)")
 	}
-	_, _ = fmt.Fprintln(p.out, line)
+	p.writeBodyOut(line)
 }
 
 // Notice is used for missing-file messages like "∘ work: no Headfile,
@@ -89,7 +85,7 @@ func (p *Printer) Notice(msg string) {
 	if p.level == LevelQuiet {
 		return
 	}
-	_, _ = fmt.Fprintln(p.out, "  "+p.symbol(SymNotice)+" "+p.styleDim(msg))
+	p.writeBodyOut(p.symbol(SymNotice) + " " + p.styleDim(msg))
 }
 
 // Verbose is a no-op outside LevelVerbose; it indents raw brew output
@@ -98,8 +94,8 @@ func (p *Printer) Verbose(content string) {
 	if p.level != LevelVerbose || strings.TrimSpace(content) == "" {
 		return
 	}
-	for _, line := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
-		_, _ = fmt.Fprintln(p.out, "      "+p.styleDim(line))
+	for _, line := range outputLines(content) {
+		p.writeBodyOut(detailIndent + p.styleDim(line))
 	}
 }
 
@@ -109,18 +105,32 @@ func (p *Printer) Verbose(content string) {
 func (p *Printer) Error(name, msg, output string) {
 	p.summary.Errors++
 	prefix := p.symbol(SymError)
-	_, _ = fmt.Fprintln(p.err, "  "+prefix+" "+name+": "+msg)
+	p.writeBodyErr(prefix + " " + name + ": " + msg)
 	if strings.TrimSpace(output) == "" {
 		return
 	}
-	for _, line := range strings.Split(strings.TrimRight(output, "\n"), "\n") {
-		_, _ = fmt.Fprintln(p.err, "      "+line)
+	for _, line := range outputLines(output) {
+		p.writeBodyErr(detailIndent + line)
 	}
+}
+
+func outputLines(content string) []string {
+	return strings.Split(strings.TrimRight(content, "\n"), "\n")
+}
+
+func (p *Printer) writeBodyOut(line string) {
+	_, _ = fmt.Fprintln(p.out, line)
+	p.bodyWritten = true
+}
+
+func (p *Printer) writeBodyErr(line string) {
+	_, _ = fmt.Fprintln(p.err, line)
+	p.bodyWritten = true
 }
 
 // Footer is emitted even in quiet mode so scripts have something to grep.
 func (p *Printer) Footer() {
-	parts := []string{}
+	var parts []string
 	if p.summary.Added > 0 {
 		parts = append(parts, fmt.Sprintf("%d added", p.summary.Added))
 	}
@@ -139,7 +149,7 @@ func (p *Printer) Footer() {
 	if len(parts) == 0 {
 		parts = append(parts, "nothing to do")
 	}
-	if p.level != LevelQuiet {
+	if p.level != LevelQuiet && p.bodyWritten {
 		_, _ = fmt.Fprintln(p.out)
 	}
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))
@@ -149,10 +159,12 @@ func (p *Printer) RestartAppsNotice(names []string) {
 	if len(names) == 0 || p.level == LevelQuiet {
 		return
 	}
-	_, _ = fmt.Fprintln(p.out)
-	_, _ = fmt.Fprintln(p.out, p.styleWarn("⚠ Restart these apps to apply upgrades"))
-	for _, n := range names {
-		_, _ = fmt.Fprintln(p.out, "  "+n)
+	if p.bodyWritten {
+		_, _ = fmt.Fprintln(p.out)
+	}
+	p.writeBodyOut(p.styleWarn("⚠ Restart these apps to apply upgrades"))
+	for _, name := range names {
+		p.writeBodyOut("  " + name)
 	}
 }
 
@@ -194,15 +206,7 @@ var (
 	styleErr      = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	styleDim      = lipgloss.NewStyle().Faint(true)
 	styleWarn     = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	styleHeaderHl = lipgloss.NewStyle().Bold(true)
 )
-
-func (p *Printer) styleHeader(s string) string {
-	if !p.color {
-		return s
-	}
-	return styleHeaderHl.Render(s)
-}
 
 func (p *Printer) styleDim(s string) string {
 	if !p.color {

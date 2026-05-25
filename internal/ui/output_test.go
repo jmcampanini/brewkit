@@ -14,40 +14,32 @@ func newTestPrinter(level Level) (*Printer, *bytes.Buffer, *bytes.Buffer) {
 
 func TestPrinter_NormalStream(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelNormal)
-	p.Group("brew")
 	p.Item(SymUpToDate, "git", "(2.45.0)")
 	p.Item(SymUpgraded, "neovim", "0.10.0 → 0.10.2")
 	p.Item(SymAdded, "ripgrep", "")
 	p.Footer()
 
 	got := out.String()
-	wantContains := []string{
-		"brew",
-		"✓ git",
-		"↑ neovim",
-		"+ ripgrep",
-		"Summary: 1 added, 1 upgraded, 1 up-to-date",
-	}
-	for _, s := range wantContains {
-		if !strings.Contains(got, s) {
-			t.Errorf("output missing %q\nfull output:\n%s", s, got)
-		}
+	want := "✓ git (2.45.0)\n" +
+		"↑ neovim 0.10.0 → 0.10.2\n" +
+		"+ ripgrep\n" +
+		"\n" +
+		"Summary: 1 added, 1 upgraded, 1 up-to-date\n"
+	if got != want {
+		t.Errorf("unexpected output:\nwant:\n%q\ngot:\n%q", want, got)
 	}
 }
 
 func TestPrinter_QuietSuppressesStream(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelQuiet)
-	p.Group("brew")
 	p.Item(SymUpToDate, "git", "(2.45.0)")
 	p.Item(SymAdded, "ripgrep", "")
 	p.Footer()
 
 	got := out.String()
-	if strings.Contains(got, "brew\n") || strings.Contains(got, "ripgrep") {
-		t.Errorf("quiet output should not contain stream lines:\n%s", got)
-	}
-	if !strings.Contains(got, "Summary:") {
-		t.Errorf("quiet output should contain summary:\n%s", got)
+	want := "Summary: 1 added, 1 up-to-date\n"
+	if got != want {
+		t.Errorf("unexpected quiet output:\nwant: %q\ngot:  %q", want, got)
 	}
 }
 
@@ -57,24 +49,28 @@ func TestPrinter_QuietStillShowsErrors(t *testing.T) {
 	p.Footer()
 
 	got := errOut.String()
-	if !strings.Contains(got, "git: install failed") {
-		t.Errorf("error not printed: %s", got)
-	}
-	if !strings.Contains(got, "brew error") {
-		t.Errorf("error detail not printed: %s", got)
+	want := "✗ git: install failed\n" +
+		"    ==> brew error\n" +
+		"    blah\n"
+	if got != want {
+		t.Errorf("unexpected error output:\nwant: %q\ngot:  %q", want, got)
 	}
 }
 
 func TestPrinter_VerboseAddsRawOutput(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelVerbose)
-	p.Group("brew")
 	p.Item(SymAdded, "ripgrep", "")
 	p.Verbose("==> Downloading...\n==> Pouring ripgrep.bottle...")
 	p.Footer()
 
 	got := out.String()
-	if !strings.Contains(got, "Downloading") || !strings.Contains(got, "Pouring") {
-		t.Errorf("verbose did not include raw output:\n%s", got)
+	want := "+ ripgrep\n" +
+		"    ==> Downloading...\n" +
+		"    ==> Pouring ripgrep.bottle...\n" +
+		"\n" +
+		"Summary: 1 added\n"
+	if got != want {
+		t.Errorf("unexpected verbose output:\nwant: %q\ngot:  %q", want, got)
 	}
 }
 
@@ -95,11 +91,9 @@ func TestPrinter_Notice(t *testing.T) {
 	p.Footer()
 
 	got := out.String()
-	if !strings.Contains(got, "work: no Headfile") {
-		t.Errorf("notice not rendered:\n%s", got)
-	}
-	if !strings.Contains(got, "1 skipped") {
-		t.Errorf("summary should reflect skip:\n%s", got)
+	want := "∘ work: no Headfile, skipping\n\nSummary: 1 skipped\n"
+	if got != want {
+		t.Errorf("unexpected notice output:\nwant: %q\ngot:  %q", want, got)
 	}
 }
 
@@ -107,8 +101,9 @@ func TestPrinter_DryRunMarker(t *testing.T) {
 	out := &bytes.Buffer{}
 	p := New(out, out, LevelNormal, false, true)
 	p.Item(SymAdded, "ripgrep", "")
-	if !strings.Contains(out.String(), "(dry-run)") {
-		t.Errorf("expected (dry-run) marker:\n%s", out.String())
+	want := "+ ripgrep (dry-run)\n"
+	if out.String() != want {
+		t.Errorf("unexpected dry-run output:\nwant: %q\ngot:  %q", want, out.String())
 	}
 }
 
@@ -117,18 +112,19 @@ func TestPrinter_RestartAppsNotice(t *testing.T) {
 	p.RestartAppsNotice([]string{"chatgpt", "claude"})
 
 	got := out.String()
-	if !strings.Contains(got, "Restart these apps") {
-		t.Errorf("notice missing:\n%s", got)
-	}
-	if !strings.Contains(got, "chatgpt") || !strings.Contains(got, "claude") {
-		t.Errorf("apps missing:\n%s", got)
+	want := "⚠ Restart these apps to apply upgrades\n" +
+		"  chatgpt\n" +
+		"  claude\n"
+	if got != want {
+		t.Errorf("unexpected restart notice:\nwant: %q\ngot:  %q", want, got)
 	}
 }
 
 func TestPrinter_FooterNothingToDo(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelNormal)
 	p.Footer()
-	if !strings.Contains(out.String(), "nothing to do") {
-		t.Errorf("expected 'nothing to do':\n%s", out.String())
+	want := "Summary: nothing to do\n"
+	if out.String() != want {
+		t.Errorf("unexpected footer output:\nwant: %q\ngot:  %q", want, out.String())
 	}
 }

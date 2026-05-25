@@ -57,8 +57,6 @@ func runApply(ctx context.Context, t profile.Kind, args []string) error {
 	}
 	defer rc.printer.Footer()
 
-	rc.printer.Group(t.String())
-
 	var filter string
 	if len(args) == 1 {
 		filter = args[0]

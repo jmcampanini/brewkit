@@ -153,8 +153,9 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "+ ripgrep") || !strings.Contains(out, "(dry-run)") {
-		t.Errorf("expected dry-run output:\n%s", out)
+	want := "+ ripgrep (dry-run)\n\nSummary: 1 added\n"
+	if out != want {
+		t.Errorf("unexpected dry-run output:\nwant: %q\ngot:  %q", want, out)
 	}
 	if len(fake.Calls) != 0 {
 		t.Errorf("dry-run should not call brewer; got %d calls", len(fake.Calls))
@@ -239,8 +240,9 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "common: no Brewfile") {
-		t.Errorf("expected missing-file notice:\n%s", out)
+	want := "∘ common: no Brewfile, skipping\n\nSummary: 1 skipped\n"
+	if out != want {
+		t.Errorf("unexpected missing-file notice:\nwant: %q\ngot:  %q", want, out)
 	}
 }
 
