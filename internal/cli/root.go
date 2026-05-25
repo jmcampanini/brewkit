@@ -19,6 +19,7 @@ func newRootCmd() *cobra.Command {
 		Use:           "brewkit",
 		Short:         "Multi-profile Homebrew manager",
 		Long:          "brewkit manages Homebrew taps, formulas, HEAD formulas, and casks across multiple layered profiles defined in profile files.",
+		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
