@@ -38,7 +38,12 @@ func newPrinter() *ui.Printer {
 	case flags.quiet:
 		level = ui.LevelQuiet
 	}
-	return ui.New(os.Stdout, os.Stderr, level, isTerminal(os.Stdout), flags.dryRun)
+	return ui.New(os.Stdout, os.Stderr, ui.PrinterOptions{
+		Level:         level,
+		Color:         isTerminal(os.Stdout),
+		DryRun:        flags.dryRun,
+		HideUnchanged: flags.hideUnchanged,
+	})
 }
 
 // runApply is the shared implementation for `brewkit tap|brew|head|cask`.
@@ -309,14 +314,14 @@ func (rc *runContext) applyBrew(e *parse.Entry) error {
 // `brew tap`/`brew list`/`brew outdated` probes from State are wasted
 // work and would also abort the run if any unrelated probe (e.g. a
 // flaky `brew outdated --cask`) failed.
-func (rc *runContext) applyHead(e *parse.Entry) (err error) {
+func (rc *runContext) applyHead(e *parse.Entry) error {
 	if rc.headSeen == nil {
 		rc.headSeen = map[string]struct{}{}
 	}
 	// Same formula listed in two layered profiles (under either qualified
 	// or short form) is reported once. Key on shortName so e.g.
-	// "homebrew/core/tmux" and "tmux" collide. We mark the entry as seen
-	// only AFTER the operation succeeds; if the first invocation errors
+	// "homebrew/core/tmux" and "tmux" collide. Mark the entry as seen
+	// only after the operation succeeds; if the first invocation errors
 	// in fail_fast=false mode, a later profile still gets a chance to
 	// retry instead of silently being reported as "already processed".
 	key := shortName(e.Name)
@@ -324,95 +329,90 @@ func (rc *runContext) applyHead(e *parse.Entry) (err error) {
 		rc.printer.Item(ui.SymUpToDate, e.Name, "(already processed)")
 		return nil
 	}
-	defer func() {
-		if err == nil {
-			rc.headSeen[key] = struct{}{}
-		}
-	}()
+	if err := rc.applyHeadEntry(e); err != nil {
+		return err
+	}
+	rc.headSeen[key] = struct{}{}
+	return nil
+}
 
+func (rc *runContext) applyHeadEntry(e *parse.Entry) error {
 	installedSHA, asHead, installed, err := rc.brewer.HeadInstalledSHA(rc.ctx, e.Name)
 	if err != nil {
 		rc.printer.Error(e.Name, "head install check failed", err.Error())
 		return err
 	}
 
-	switch {
-	case !installed:
-		// Confirm the formula actually exposes a HEAD source before
-		// trying to install it. Without this guard a Headfile entry for
-		// a formula whose upstream dropped HEAD support would abort the
-		// run on the first such item.
-		_, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, e.Name)
-		if err != nil {
-			rc.printer.Error(e.Name, "head latest check failed", err.Error())
-			return err
-		}
-		if !hasHead {
-			rc.printer.Item(ui.SymUpToDate, e.Name, "(no HEAD source)")
-			return nil
-		}
-		if rc.dryRun {
-			rc.printer.Item(ui.SymAdded, e.Name, "(HEAD)")
-			return nil
-		}
-		res, err := rc.brewer.HeadInstall(rc.ctx, e.Name)
-		if err != nil {
-			rc.printer.Error(e.Name, "head install failed", res.Output)
-			return err
-		}
-		rc.printer.Item(ui.SymAdded, e.Name, res.To)
-		rc.printer.Verbose(res.Output)
-	case installed && !asHead:
-		// Same hasHead guard as the !installed branch — if upstream
-		// dropped HEAD support we must not try to reinstall.
-		_, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, e.Name)
-		if err != nil {
-			rc.printer.Error(e.Name, "head latest check failed", err.Error())
-			return err
-		}
-		if !hasHead {
-			rc.printer.Item(ui.SymUpToDate, e.Name, "(no HEAD source)")
-			return nil
-		}
-		if rc.dryRun {
-			rc.printer.Item(ui.SymUpgraded, e.Name, "(installed → HEAD)")
-			return nil
-		}
-		res, err := rc.brewer.HeadReinstall(rc.ctx, e.Name)
-		if err != nil {
-			rc.printer.Error(e.Name, "head reinstall failed", res.Output)
-			return err
-		}
-		rc.printer.Item(ui.SymUpgraded, e.Name, "installed → "+res.To)
-		rc.printer.Verbose(res.Output)
-	default:
-		// Installed as HEAD; compare to latest.
-		latestSHA, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, e.Name)
-		if err != nil {
-			rc.printer.Error(e.Name, "head latest check failed", err.Error())
-			return err
-		}
-		if !hasHead {
-			rc.printer.Item(ui.SymUpToDate, e.Name, "(no HEAD source)")
-			return nil
-		}
-		if latestSHA == installedSHA {
-			rc.printer.Item(ui.SymUpToDate, e.Name, "(HEAD-"+installedSHA+")")
-			return nil
-		}
-		if rc.dryRun {
-			rc.printer.Item(ui.SymUpgraded, e.Name, "HEAD-"+installedSHA+" → HEAD-"+latestSHA)
-			return nil
-		}
-		res, err := rc.brewer.HeadReinstall(rc.ctx, e.Name)
-		if err != nil {
-			rc.printer.Error(e.Name, "head reinstall failed", res.Output)
-			return err
-		}
-		rc.printer.Item(ui.SymUpgraded, e.Name, "HEAD-"+installedSHA+" → HEAD-"+latestSHA)
-		rc.printer.Verbose(res.Output)
+	if !installed {
+		return rc.installHead(e.Name)
 	}
+	if !asHead {
+		// A stable install is already an invalid Headfile state. Report it
+		// directly instead of fetching the latest HEAD SHA, so transient
+		// network/cache failures cannot mask the actionable error.
+		headErr := fmt.Errorf("%s: installed but not as HEAD", e.Name)
+		rc.printer.Error(e.Name, "installed but not as HEAD", "")
+		return headErr
+	}
+	return rc.updateHead(e.Name, installedSHA)
+}
+
+func (rc *runContext) installHead(name string) error {
+	// Confirm the formula actually exposes a HEAD source before trying to
+	// install it. A Headfile entry without a HEAD source is invalid and
+	// must be fixed by the user rather than silently accepted as up-to-date.
+	if _, err := rc.requireHeadSource(name); err != nil {
+		return err
+	}
+	if rc.dryRun {
+		rc.printer.Item(ui.SymAdded, name, "(HEAD)")
+		return nil
+	}
+	res, err := rc.brewer.HeadInstall(rc.ctx, name)
+	if err != nil {
+		rc.printer.Error(name, "head install failed", res.Output)
+		return err
+	}
+	rc.printer.Item(ui.SymAdded, name, res.To)
+	rc.printer.Verbose(res.Output)
 	return nil
+}
+
+func (rc *runContext) updateHead(name, installedSHA string) error {
+	latestSHA, err := rc.requireHeadSource(name)
+	if err != nil {
+		return err
+	}
+	if latestSHA == installedSHA {
+		rc.printer.Item(ui.SymUpToDate, name, "(HEAD-"+installedSHA+")")
+		return nil
+	}
+	if rc.dryRun {
+		rc.printer.Item(ui.SymUpgraded, name, "HEAD-"+installedSHA+" → HEAD-"+latestSHA)
+		return nil
+	}
+	res, err := rc.brewer.HeadReinstall(rc.ctx, name)
+	if err != nil {
+		rc.printer.Error(name, "head reinstall failed", res.Output)
+		return err
+	}
+	rc.printer.Item(ui.SymUpgraded, name, "HEAD-"+installedSHA+" → HEAD-"+latestSHA)
+	rc.printer.Verbose(res.Output)
+	return nil
+}
+
+func (rc *runContext) requireHeadSource(name string) (string, error) {
+	latestSHA, hasHead, err := rc.brewer.HeadLatestSHA(rc.ctx, name)
+	if err != nil {
+		rc.printer.Error(name, "head latest check failed", err.Error())
+		return "", err
+	}
+	if !hasHead {
+		err := fmt.Errorf("%s: no HEAD source", name)
+		rc.printer.Error(name, "no HEAD source", "")
+		return "", err
+	}
+	return latestSHA, nil
 }
 
 func (rc *runContext) applyCask(e *parse.Entry) error {

@@ -1,15 +1,17 @@
 package cli
 
 import (
+	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/spf13/cobra"
 )
 
 type globalFlags struct {
-	configPath string
-	profiles   []string
-	dryRun     bool
-	verbose    bool
-	quiet      bool
+	configPath    string
+	profiles      []string
+	dryRun        bool
+	verbose       bool
+	quiet         bool
+	hideUnchanged bool
 }
 
 var flags globalFlags
@@ -39,6 +41,19 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDocsCmd())
 
 	return root
+}
+
+func newApplyCmd(use, short string, kind profile.Kind) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runApply(cmd.Context(), kind, args)
+		},
+	}
+	cmd.Flags().BoolVar(&flags.hideUnchanged, "hide-unchanged", false, "suppress per-item output for entries that are already satisfied")
+	return cmd
 }
 
 // Execute is the entrypoint invoked from cmd/brewkit/main.go.

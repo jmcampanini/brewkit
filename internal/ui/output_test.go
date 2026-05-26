@@ -9,7 +9,7 @@ import (
 func newTestPrinter(level Level) (*Printer, *bytes.Buffer, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
-	return New(out, errOut, level, false, false), out, errOut
+	return New(out, errOut, PrinterOptions{Level: level}), out, errOut
 }
 
 func TestPrinter_NormalStream(t *testing.T) {
@@ -27,6 +27,20 @@ func TestPrinter_NormalStream(t *testing.T) {
 		"Summary: 1 added, 1 upgraded, 1 up-to-date\n"
 	if got != want {
 		t.Errorf("unexpected output:\nwant:\n%q\ngot:\n%q", want, got)
+	}
+}
+
+func TestPrinter_HideUnchangedSuppressesOnlyUpToDate(t *testing.T) {
+	out := &bytes.Buffer{}
+	p := New(out, out, PrinterOptions{Level: LevelNormal, HideUnchanged: true})
+	p.Item(SymUpToDate, "git", "(2.45.0)")
+	p.Item(SymAdded, "ripgrep", "")
+	p.Footer()
+
+	got := out.String()
+	want := "+ ripgrep\n\nSummary: 1 added, 1 up-to-date\n"
+	if got != want {
+		t.Errorf("unexpected hide-unchanged output:\nwant: %q\ngot:  %q", want, got)
 	}
 }
 
@@ -91,7 +105,7 @@ func TestPrinter_Notice(t *testing.T) {
 	p.Footer()
 
 	got := out.String()
-	want := "∘ work: no Headfile, skipping\n\nSummary: 1 skipped\n"
+	want := "⊘ work: no Headfile, skipping\n\nSummary: 1 skipped\n"
 	if got != want {
 		t.Errorf("unexpected notice output:\nwant: %q\ngot:  %q", want, got)
 	}
@@ -99,7 +113,7 @@ func TestPrinter_Notice(t *testing.T) {
 
 func TestPrinter_DryRunMarker(t *testing.T) {
 	out := &bytes.Buffer{}
-	p := New(out, out, LevelNormal, false, true)
+	p := New(out, out, PrinterOptions{Level: LevelNormal, DryRun: true})
 	p.Item(SymAdded, "ripgrep", "")
 	want := "+ ripgrep (dry-run)\n"
 	if out.String() != want {

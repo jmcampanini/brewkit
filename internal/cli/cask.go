@@ -6,12 +6,9 @@ import (
 )
 
 func newCaskCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "cask [CASK]",
-		Short: "Apply Caskfile entries for active profiles (greedy upgrades)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApply(cmd.Context(), profile.KindCask, args)
-		},
-	}
+	return newApplyCmd(
+		"cask [CASK]",
+		"Apply Caskfile entries for active profiles (greedy upgrades)",
+		profile.KindCask,
+	)
 }

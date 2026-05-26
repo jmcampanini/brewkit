@@ -6,12 +6,9 @@ import (
 )
 
 func newHeadCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "head [FORMULA]",
-		Short: "Apply Headfile entries for active profiles (SHA-idempotent)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApply(cmd.Context(), profile.KindHead, args)
-		},
-	}
+	return newApplyCmd(
+		"head [FORMULA]",
+		"Apply Headfile entries for active profiles (SHA-idempotent)",
+		profile.KindHead,
+	)
 }

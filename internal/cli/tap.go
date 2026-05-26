@@ -6,12 +6,9 @@ import (
 )
 
 func newTapCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "tap [TAP]",
-		Short: "Apply Tapfile entries for active profiles",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApply(cmd.Context(), profile.KindTap, args)
-		},
-	}
+	return newApplyCmd(
+		"tap [TAP]",
+		"Apply Tapfile entries for active profiles",
+		profile.KindTap,
+	)
 }

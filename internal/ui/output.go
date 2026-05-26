@@ -38,18 +38,34 @@ type Summary struct {
 	Skipped  int
 }
 
-type Printer struct {
-	out         io.Writer
-	err         io.Writer
-	level       Level
-	dryRun      bool
-	color       bool
-	summary     Summary
-	bodyWritten bool // any non-summary line was written
+// PrinterOptions configures a Printer.
+type PrinterOptions struct {
+	Level         Level
+	Color         bool
+	DryRun        bool
+	HideUnchanged bool
 }
 
-func New(out, errOut io.Writer, level Level, color, dryRun bool) *Printer {
-	return &Printer{out: out, err: errOut, level: level, dryRun: dryRun, color: color}
+type Printer struct {
+	out           io.Writer
+	err           io.Writer
+	level         Level
+	dryRun        bool
+	hideUnchanged bool
+	color         bool
+	summary       Summary
+	bodyWritten   bool // any non-summary line was written
+}
+
+func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
+	return &Printer{
+		out:           out,
+		err:           errOut,
+		level:         opts.Level,
+		dryRun:        opts.DryRun,
+		hideUnchanged: opts.HideUnchanged,
+		color:         opts.Color,
+	}
 }
 
 func (p *Printer) Item(sym Symbol, name, detail string) {
@@ -67,6 +83,9 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 	if p.level == LevelQuiet && sym != SymError {
 		return
 	}
+	if p.hideUnchanged && sym == SymUpToDate {
+		return
+	}
 	prefix := p.symbol(sym)
 	line := prefix + " " + name
 	if detail != "" {
@@ -78,7 +97,7 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 	p.writeBodyOut(line)
 }
 
-// Notice is used for missing-file messages like "∘ work: no Headfile,
+// Notice is used for missing-file messages like "⊘ work: no Headfile,
 // skipping" — informational, not an error, but counted as a skip.
 func (p *Printer) Notice(msg string) {
 	p.summary.Skipped++
@@ -169,32 +188,37 @@ func (p *Printer) RestartAppsNotice(names []string) {
 }
 
 func (p *Printer) symbol(sym Symbol) string {
+	plain := symbolText(sym)
 	if !p.color {
-		switch sym {
-		case SymUpToDate:
-			return "✓"
-		case SymAdded:
-			return "+"
-		case SymUpgraded:
-			return "↑"
-		case SymError:
-			return "✗"
-		case SymNotice:
-			return "∘"
-		}
-		return "?"
+		return plain
 	}
 	switch sym {
 	case SymUpToDate:
-		return styleOK.Render("✓")
+		return styleOK.Render(plain)
 	case SymAdded:
-		return styleAdded.Render("+")
+		return styleAdded.Render(plain)
 	case SymUpgraded:
-		return styleUpgraded.Render("↑")
+		return styleUpgraded.Render(plain)
 	case SymError:
-		return styleErr.Render("✗")
+		return styleErr.Render(plain)
 	case SymNotice:
-		return styleDim.Render("∘")
+		return styleDim.Render(plain)
+	}
+	return plain
+}
+
+func symbolText(sym Symbol) string {
+	switch sym {
+	case SymUpToDate:
+		return "✓"
+	case SymAdded:
+		return "+"
+	case SymUpgraded:
+		return "↑"
+	case SymError:
+		return "✗"
+	case SymNotice:
+		return "⊘"
 	}
 	return "?"
 }
