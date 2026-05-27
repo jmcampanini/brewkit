@@ -333,32 +333,32 @@ func (rc *runContext) applyHead(e *parse.Entry) error {
 		rc.printer.Item(ui.SymUpToDate, e.Name, "(already processed)")
 		return nil
 	}
-	if err := rc.applyHeadEntry(e); err != nil {
+	if err := rc.applyHeadEntry(e.Name); err != nil {
 		return err
 	}
 	rc.headSeen[key] = struct{}{}
 	return nil
 }
 
-func (rc *runContext) applyHeadEntry(e *parse.Entry) error {
-	installedSHA, asHead, installed, err := rc.brewer.HeadInstalledSHA(rc.ctx, e.Name)
+func (rc *runContext) applyHeadEntry(name string) error {
+	installedSHA, asHead, installed, err := rc.brewer.HeadInstalledSHA(rc.ctx, name)
 	if err != nil {
-		rc.printer.Error(e.Name, "head install check failed", err.Error())
+		rc.printer.Error(name, "head install check failed", err.Error())
 		return err
 	}
 
 	if !installed {
-		return rc.installHead(e.Name)
+		return rc.installHead(name)
 	}
 	if !asHead {
 		// A stable install is already an invalid Headfile state. Report it
 		// directly instead of fetching the latest HEAD SHA, so transient
 		// network/cache failures cannot mask the actionable error.
-		headErr := fmt.Errorf("%s: installed but not as HEAD", e.Name)
-		rc.printer.Error(e.Name, "installed but not as HEAD", "")
+		headErr := fmt.Errorf("%s: installed but not as HEAD", name)
+		rc.printer.Error(name, "installed but not as HEAD", "")
 		return headErr
 	}
-	return rc.updateHead(e.Name, installedSHA)
+	return rc.updateHead(name, installedSHA)
 }
 
 func (rc *runContext) installHead(name string) error {

@@ -29,7 +29,10 @@ const (
 	SymNotice
 )
 
-const detailIndent = "    "
+const (
+	detailIndent    = "    "
+	spinnerInterval = 100 * time.Millisecond
+)
 
 type Summary struct {
 	Added    int
@@ -147,41 +150,43 @@ func (p *Printer) WithSpinner(message string, fn func() error) error {
 
 	done := make(chan struct{})
 	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-
-		wrote := false
-		frame := 0
-		for {
-			select {
-			case <-done:
-				if wrote {
-					p.clearSpinner()
-				}
-				return
-			default:
-			}
-
-			p.writeSpinnerFrame(spinnerFrames[frame%len(spinnerFrames)], message)
-			wrote = true
-			frame++
-
-			select {
-			case <-done:
-				p.clearSpinner()
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
+	go p.runSpinner(message, done, stopped)
 
 	defer func() {
 		close(done)
 		<-stopped
 	}()
 	return fn()
+}
+
+func (p *Printer) runSpinner(message string, done <-chan struct{}, stopped chan<- struct{}) {
+	defer close(stopped)
+	ticker := time.NewTicker(spinnerInterval)
+	defer ticker.Stop()
+
+	wrote := false
+	frame := 0
+	for {
+		select {
+		case <-done:
+			if wrote {
+				p.clearSpinner()
+			}
+			return
+		default:
+		}
+
+		p.writeSpinnerFrame(spinnerFrames[frame%len(spinnerFrames)], message)
+		wrote = true
+		frame++
+
+		select {
+		case <-done:
+			p.clearSpinner()
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func outputLines(content string) []string {
