@@ -14,7 +14,11 @@ import (
 )
 
 func profilesFlagChanged() bool {
-	return configFlagSet != nil && configFlagSet.Lookup("profiles") != nil && configFlagSet.Lookup("profiles").Changed
+	if configFlagSet == nil {
+		return false
+	}
+	flag := configFlagSet.Lookup("profiles")
+	return flag != nil && flag.Changed
 }
 
 func runLint(_ context.Context) error {

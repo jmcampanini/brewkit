@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jmcampanini/brewkit/internal/profile"
@@ -29,42 +30,44 @@ func runConfig(_ context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprint(os.Stdout, string(out)); err != nil {
+
+	w := os.Stdout
+	if _, err := w.Write(out); err != nil {
 		return err
 	}
 	if len(out) > 0 && out[len(out)-1] != '\n' {
-		if _, err := fmt.Fprintln(os.Stdout); err != nil {
+		if _, err := fmt.Fprintln(w); err != nil {
 			return err
 		}
 	}
 
-	if _, err := fmt.Fprintln(os.Stdout, "# provenance:"); err != nil {
+	if _, err := fmt.Fprintln(w, "# provenance:"); err != nil {
 		return err
 	}
 	headers := reporter.ProvenanceHeaders()
-	if _, err := fmt.Fprintf(os.Stdout, "# %s\n", strings.Join(headers, "\t")); err != nil {
+	if _, err := fmt.Fprintf(w, "# %s\n", strings.Join(headers, "\t")); err != nil {
 		return err
 	}
 	for _, row := range reporter.ProvenanceRows() {
-		if _, err := fmt.Fprintf(os.Stdout, "# %s\n", strings.Join(row, "\t")); err != nil {
+		if _, err := fmt.Fprintf(w, "# %s\n", strings.Join(row, "\t")); err != nil {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(os.Stdout, "# loaded_files = [%s]\n", quoteList(report.LoadedFiles)); err != nil {
+	if _, err := fmt.Fprintf(w, "# loaded_files = [%s]\n", quoteList(report.LoadedFiles)); err != nil {
 		return err
 	}
 
-	if _, err := fmt.Fprintln(os.Stdout, "# effective:"); err != nil {
+	if _, err := fmt.Fprintln(w, "# effective:"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(os.Stdout, "# effective_dir = %q\n", filepath.Clean(effectiveDir)); err != nil {
+	if _, err := fmt.Fprintf(w, "# effective_dir = %q\n", filepath.Clean(effectiveDir)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(os.Stdout, "# effective_profiles = [%s]\n", quoteList(profiles)); err != nil {
+	if _, err := fmt.Fprintf(w, "# effective_profiles = [%s]\n", quoteList(profiles)); err != nil {
 		return err
 	}
-	if hasProfile(profiles, profile.LocalName) {
-		if _, err := fmt.Fprintln(os.Stdout, "# note: 'local' profile auto-appended (*file.local present)"); err != nil {
+	if slices.Contains(profiles, profile.LocalName) {
+		if _, err := fmt.Fprintln(w, "# note: 'local' profile auto-appended (*file.local present)"); err != nil {
 			return err
 		}
 	}
@@ -72,21 +75,9 @@ func runConfig(_ context.Context) error {
 }
 
 func quoteList(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
 	quoted := make([]string, len(values))
 	for i, value := range values {
 		quoted[i] = fmt.Sprintf("%q", value)
 	}
 	return strings.Join(quoted, ", ")
-}
-
-func hasProfile(values []string, profileName string) bool {
-	for _, value := range values {
-		if value == profileName {
-			return true
-		}
-	}
-	return false
 }

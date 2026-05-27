@@ -1,5 +1,5 @@
 // Package config loads brewkit's raw configuration from defaults,
-// an optional brewkit.toml file, B... environment variables, and
+// an optional brewkit.toml file, BREWKIT_* environment variables, and
 // config-backed CLI flags.
 package config
 
@@ -61,7 +61,7 @@ func RegisterFlags(flags *pflag.FlagSet) error {
 }
 
 // Load reads brewkit.toml from path (or, if path is empty, from
-// ./brewkit.toml in the current working directory) and overlays B... env vars.
+// ./brewkit.toml in the current working directory) and overlays BREWKIT_* env vars.
 // If path is empty and no file exists, Defaults is used. A non-empty path that
 // does not exist is an error.
 func Load(path string) (Config, error) {

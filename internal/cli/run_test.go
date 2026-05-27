@@ -22,6 +22,13 @@ func resetFlags() {
 	_ = os.Unsetenv("BREWKIT_PROFILES")
 }
 
+func useBrewer(t *testing.T, brewer brew.Brewer) {
+	t.Helper()
+	old := brewerFactory
+	brewerFactory = func() brew.Brewer { return brewer }
+	t.Cleanup(func() { brewerFactory = old })
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	out, _ := captureOutput(t, fn)
@@ -153,8 +160,7 @@ func TestRunApply_ConfigOmittedDir_ResolvesAgainstProcessCWD(t *testing.T) {
 	flags.dryRun = true
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -177,8 +183,7 @@ func TestRunApply_Tap_Adds(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindTap, nil); err != nil {
@@ -205,8 +210,7 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 	flags.dryRun = true
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -237,8 +241,7 @@ func TestRunApply_Brew_UpgradesAndUpToDate(t *testing.T) {
 		Installed: true, Version: "0.10.0", Outdated: true, OutdatedTo: "0.10.2",
 	}
 	fake.FormulasMap["git"] = brew.FormulaState{Installed: true, Version: "2.45.0"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -274,8 +277,7 @@ func TestRunApply_Brew_HideUnchangedKeepsChangesAndSummary(t *testing.T) {
 		Installed: true, Version: "0.10.0", Outdated: true, OutdatedTo: "0.10.2",
 	}
 	fake.FormulasMap["git"] = brew.FormulaState{Installed: true, Version: "2.45.0"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -309,8 +311,7 @@ func TestRunApply_Tap_HideUnchanged(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.TapsSet["homebrew/core"] = true
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindTap, nil); err != nil {
@@ -338,8 +339,7 @@ func TestRunApply_Cask_HideUnchanged(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.CasksMap["iterm2"] = brew.CaskState{Installed: true, Version: "3.5.0"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindCask, nil); err != nil {
@@ -368,8 +368,7 @@ func TestRunApply_Cask_RestartNotice(t *testing.T) {
 	fake.CasksMap["claude"] = brew.CaskState{
 		Installed: true, Version: "1.0.0", Outdated: true, OutdatedTo: "1.1.0",
 	}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindCask, nil); err != nil {
@@ -390,8 +389,7 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -420,8 +418,7 @@ func TestRunApply_NoActiveProfilesErrors(t *testing.T) {
 	flags.configPath = tomlPath
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	err := runApply(context.Background(), profile.KindBrew, nil)
 	if err == nil {
@@ -446,8 +443,7 @@ func TestRunApply_PositionalFilter(t *testing.T) {
 	flags.dryRun = true
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, []string{"git"}); err != nil {
@@ -474,8 +470,7 @@ func TestRunApply_Tap_FailureAborts(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpTap] = map[string]bool{"broken/tap": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		err := runApply(context.Background(), profile.KindTap, nil)
@@ -502,8 +497,7 @@ func TestRunApply_Brew_UpgradeFailure(t *testing.T) {
 		Installed: true, Version: "0.10.0", Outdated: true, OutdatedTo: "0.10.2",
 	}
 	fake.FailOps[brew.OpBrewUpgrade] = map[string]bool{"neovim": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err == nil {
@@ -530,8 +524,7 @@ func TestRunApply_Cask_UpgradeFailure_NoRestartNotice(t *testing.T) {
 		Installed: true, Version: "1.0.0", Outdated: true, OutdatedTo: "1.1.0",
 	}
 	fake.FailOps[brew.OpCaskUpgrade] = map[string]bool{"claude": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindCask, nil); err == nil {
@@ -554,8 +547,7 @@ func TestRunApply_Cask_InstallFailure(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpCaskInstall] = map[string]bool{"antinote": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindCask, nil); err == nil {
@@ -578,8 +570,7 @@ func TestRunApply_FailFastTrue_StopsImmediately(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpBrewInstall] = map[string]bool{"borked": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err == nil {
@@ -615,8 +606,7 @@ func TestRunApply_FailFastFalse_ContinuesAndReturnsError(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpBrewInstall] = map[string]bool{"borked": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		err := runApply(context.Background(), profile.KindBrew, nil)
@@ -640,8 +630,7 @@ func TestRunApply_QualifiedNameCachedUnderShortName(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -699,8 +688,7 @@ func TestRunApply_Head_InstalledSHAError(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := &headInstalledErrFake{Fake: brew.NewFake(), errName: "tmux"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
@@ -721,8 +709,7 @@ func TestRunApply_Head_LatestSHAError(t *testing.T) {
 	base := brew.NewFake()
 	base.HeadInstalls["tmux"] = "abc1234"
 	fake := &headLatestErrFake{Fake: base, errName: "tmux", errMsg: "network flake"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
@@ -750,8 +737,7 @@ func TestRunApply_Head_InstallFailure(t *testing.T) {
 	fake.HeadLatest["tmux"] = "abc1234"
 	fake.HeadHasURL["tmux"] = true
 	fake.FailOps[brew.OpHeadInstall] = map[string]bool{"tmux": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
@@ -773,8 +759,7 @@ func TestRunApply_Head_SHAMoved_DryRun(t *testing.T) {
 	fake := brew.NewFake()
 	fake.HeadInstalls["tmux"] = "oldsha0"
 	fake.HeadLatest["tmux"] = "newsha1"
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
@@ -804,8 +789,7 @@ func TestRunApply_Head_SHAMoved_RealRun(t *testing.T) {
 	fake := brew.NewFake()
 	fake.HeadInstalls["tmux"] = "oldsha0"
 	fake.HeadLatest["tmux"] = "newsha1"
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
@@ -844,8 +828,7 @@ func TestRunApply_EnsureStateFailure(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := &stateFailProbe{Fake: brew.NewFake()}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		err := runApply(context.Background(), profile.KindBrew, nil)
@@ -870,8 +853,7 @@ func TestRunApply_Head_InstalledStableErrorsNoReinstall(t *testing.T) {
 	base := brew.NewFake()
 	base.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
 	fake := &headLatestErrFake{Fake: base, errName: "direnv", errMsg: "network flake"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
@@ -905,8 +887,7 @@ func TestRunApply_Head_InstalledStableWithoutHeadSourceErrorsNoReinstall(t *test
 
 	fake := brew.NewFake()
 	fake.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	var runErr error
 	_, errOut := captureOutput(t, func() {
@@ -939,8 +920,7 @@ func TestRunApply_Head_NoSourceErrorsNoInstall(t *testing.T) {
 	fake := brew.NewFake()
 	// HeadHasURL["lonely"] is false (zero value); HeadLatest also empty.
 	// Fake.HeadLatestSHA returns hasHead=false in this case.
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
@@ -987,8 +967,7 @@ func TestRunApply_DryRun_LayeredProfilesProjectsState(t *testing.T) {
 	flags.dryRun = true
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -1052,8 +1031,7 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 		Fake: brew.NewFake(),
 		errs: map[string]error{"alpha": errAlpha, "bravo": errBravo},
 	}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	var runErr error
 	captureStdout(t, func() {
@@ -1098,8 +1076,7 @@ func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 	fake.HeadHasURL["tmux"] = true
 	fake.HeadLatest["ok"] = "def5678"
 	fake.HeadHasURL["ok"] = true
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
@@ -1190,8 +1167,7 @@ func TestRunApply_Head_RetryAfterFailure_LayeredProfiles(t *testing.T) {
 		failOnce: map[string]bool{"tmux": true},
 		attempts: map[string]int{},
 	}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	var runErr error
 	out := captureStdout(t, func() {
@@ -1229,8 +1205,7 @@ func TestRunApply_UnknownLineFailsRun(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		err := runApply(context.Background(), profile.KindBrew, nil)
@@ -1264,8 +1239,7 @@ func TestRunApply_Head_HideUnchangedHidesUpToDateAndDuplicate(t *testing.T) {
 	fake := brew.NewFake()
 	fake.HeadInstalls["tmux"] = "abc1234"
 	fake.HeadLatest["tmux"] = "abc1234"
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
@@ -1307,8 +1281,7 @@ func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {
 	fake := brew.NewFake()
 	fake.HeadInstalls["homebrew/core/tmux"] = "abc1234"
 	fake.HeadLatest["homebrew/core/tmux"] = "abc1234"
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
@@ -1347,8 +1320,7 @@ func TestRunApply_Head_LayeredProfilesDeduped(t *testing.T) {
 	fake := brew.NewFake()
 	fake.HeadInstalls["tmux"] = "abc1234"
 	fake.HeadLatest["tmux"] = "abc1234"
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
@@ -1386,8 +1358,7 @@ func TestRunApply_Head_DoesNotFetchState(t *testing.T) {
 	fake.HeadInstalls["tmux"] = "abc1234"
 	fake.HeadLatest["tmux"] = "abc1234"
 	wrapped := &stateProbe{Fake: fake, fetched: &stateFetched}
-	brewerFactory = func() brew.Brewer { return wrapped }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, wrapped)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
@@ -1409,8 +1380,7 @@ func TestRunApply_StateNotFetched_WhenNoFiles(t *testing.T) {
 	stateFetched := false
 	fake := brew.NewFake()
 	wrapped := &stateProbe{Fake: fake, fetched: &stateFetched}
-	brewerFactory = func() brew.Brewer { return wrapped }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, wrapped)
 
 	captureStdout(t, func() {
 		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
@@ -1443,8 +1413,7 @@ func TestRunApply_PositionalFilter_NotFoundErrors(t *testing.T) {
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	fake := brew.NewFake()
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+	useBrewer(t, fake)
 
 	captureStdout(t, func() {
 		err := runApply(context.Background(), profile.KindBrew, []string{"absent"})
