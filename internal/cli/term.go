@@ -20,3 +20,16 @@ func isTerminal(w io.Writer) bool {
 	}
 	return term.IsTerminal(int(f.Fd()))
 }
+
+func terminalWidth(w io.Writer) int {
+	type fder interface{ Fd() uintptr }
+	f, ok := w.(fder)
+	if !ok {
+		return 0
+	}
+	width, _, err := term.GetSize(int(f.Fd()))
+	if err != nil || width <= 0 {
+		return 0
+	}
+	return width
+}

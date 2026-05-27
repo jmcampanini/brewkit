@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type Level int
@@ -30,8 +31,11 @@ const (
 )
 
 const (
-	detailIndent    = "    "
-	spinnerInterval = 100 * time.Millisecond
+	detailIndent         = "    "
+	spinnerInterval      = 100 * time.Millisecond
+	defaultSpinnerWidth  = 80
+	spinnerTruncateTail  = "…"
+	spinnerClearSequence = "\r\033[2K"
 )
 
 type Summary struct {
@@ -49,6 +53,7 @@ type PrinterOptions struct {
 	DryRun        bool
 	HideUnchanged bool
 	Spinner       bool
+	SpinnerWidth  int
 }
 
 type Printer struct {
@@ -59,11 +64,16 @@ type Printer struct {
 	hideUnchanged bool
 	color         bool
 	spinner       bool
+	spinnerWidth  int
 	summary       Summary
 	bodyWritten   bool // any non-summary line was written
 }
 
 func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
+	spinnerWidth := opts.SpinnerWidth
+	if opts.Spinner && spinnerWidth <= 0 {
+		spinnerWidth = defaultSpinnerWidth
+	}
 	return &Printer{
 		out:           out,
 		err:           errOut,
@@ -72,6 +82,7 @@ func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 		hideUnchanged: opts.HideUnchanged,
 		color:         opts.Color,
 		spinner:       opts.Spinner,
+		spinnerWidth:  spinnerWidth,
 	}
 }
 
@@ -204,12 +215,26 @@ func (p *Printer) writeBodyErr(line string) {
 }
 
 func (p *Printer) writeSpinnerFrame(frame, message string) {
-	line := p.styleDim(frame + " " + message)
-	_, _ = fmt.Fprintf(p.err, "\r\033[2K%s", line)
+	line := p.styleDim(p.truncateSpinnerLine(frame + " " + message))
+	_, _ = fmt.Fprintf(p.err, "%s%s", spinnerClearSequence, line)
+}
+
+func (p *Printer) truncateSpinnerLine(line string) string {
+	if p.spinnerWidth <= 0 {
+		return line
+	}
+	// Leave the final column unused. Writing into the last column can trigger
+	// terminal autowrap on some emulators, which would make clearSpinner clear
+	// only the wrapped physical line and leave stale spinner fragments behind.
+	maxWidth := p.spinnerWidth - 1
+	if maxWidth <= 0 {
+		return ""
+	}
+	return ansi.Truncate(line, maxWidth, spinnerTruncateTail)
 }
 
 func (p *Printer) clearSpinner() {
-	_, _ = fmt.Fprint(p.err, "\r\033[2K")
+	_, _ = fmt.Fprint(p.err, spinnerClearSequence)
 }
 
 // Footer is emitted even in quiet mode so scripts have something to grep.

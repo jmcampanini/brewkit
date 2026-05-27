@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func newTestPrinter(level Level) (*Printer, *bytes.Buffer, *bytes.Buffer) {
@@ -30,9 +32,7 @@ func (w *signalWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	n, err := w.buf.Write(p)
 	w.mu.Unlock()
-	if bytes.Contains(p, []byte("Installing ripgrep…")) {
-		w.once.Do(func() { close(w.wrote) })
-	}
+	w.once.Do(func() { close(w.wrote) })
 	return n, err
 }
 
@@ -170,8 +170,24 @@ func TestPrinter_SpinnerActiveWritesOnlyTransientStderr(t *testing.T) {
 		t.Fatalf("spinner should not write durable stdout output: %q", out.String())
 	}
 	got := errOut.String()
-	if !strings.Contains(got, "Installing ripgrep…") || !strings.HasSuffix(got, "\r\x1b[2K") {
+	if !strings.Contains(got, "Installing ripgrep…") || !strings.HasSuffix(got, spinnerClearSequence) {
 		t.Fatalf("spinner should render then clear stderr; got %q", got)
+	}
+}
+
+func TestPrinter_SpinnerTruncatesToTerminalWidth(t *testing.T) {
+	p := New(&bytes.Buffer{}, &bytes.Buffer{}, PrinterOptions{
+		Level:        LevelNormal,
+		Spinner:      true,
+		SpinnerWidth: 16,
+	})
+	line := p.truncateSpinnerLine("⠋ Installing " + strings.Repeat("x", 100))
+
+	if width := ansi.StringWidth(line); width > 15 {
+		t.Fatalf("spinner line width = %d, want <= 15; line=%q", width, line)
+	}
+	if !strings.HasSuffix(line, spinnerTruncateTail) {
+		t.Fatalf("long spinner line should be visibly truncated; got %q", line)
 	}
 }
 

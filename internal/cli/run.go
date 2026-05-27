@@ -40,12 +40,21 @@ func newPrinter() *ui.Printer {
 	}
 	stdoutTTY := isTerminal(os.Stdout)
 	stderrTTY := isTerminal(os.Stderr)
+	spinner := level == ui.LevelNormal && stdoutTTY && stderrTTY
+	spinnerWidth := 0
+	if spinner {
+		spinnerWidth = terminalWidth(os.Stderr)
+		if spinnerWidth <= 1 {
+			spinner = false
+		}
+	}
 	return ui.New(os.Stdout, os.Stderr, ui.PrinterOptions{
 		Level:         level,
 		Color:         stdoutTTY,
 		DryRun:        flags.dryRun,
 		HideUnchanged: flags.hideUnchanged,
-		Spinner:       level == ui.LevelNormal && stdoutTTY && stderrTTY,
+		Spinner:       spinner,
+		SpinnerWidth:  spinnerWidth,
 	})
 }
 
