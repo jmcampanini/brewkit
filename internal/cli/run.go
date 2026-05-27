@@ -18,16 +18,16 @@ import (
 // brewerFactory is overridden in tests to inject a Fake brewer.
 var brewerFactory = func() brew.Brewer { return brew.NewExec() }
 
-func loadEffectiveConfig() (config.Config, []string, error) {
-	cfg, err := config.Load(flags.configPath)
+func loadEffectiveConfig() (config.Config, config.LoadReport, []string, error) {
+	cfg, report, err := config.LoadWithReport(flags.configPath, configFlagSet)
 	if err != nil {
-		return config.Config{}, nil, err
+		return config.Config{}, config.LoadReport{}, nil, err
 	}
-	resolved, err := profile.Resolve(cfg, flags.profiles)
+	resolved, err := profile.Resolve(cfg)
 	if err != nil {
-		return config.Config{}, nil, err
+		return config.Config{}, config.LoadReport{}, nil, err
 	}
-	return cfg, resolved, nil
+	return cfg, report, resolved, nil
 }
 
 func newPrinter() *ui.Printer {
@@ -48,9 +48,12 @@ func newPrinter() *ui.Printer {
 
 // runApply is the shared implementation for `brewkit tap|brew|head|cask`.
 func runApply(ctx context.Context, t profile.Kind, args []string) error {
-	cfg, profiles, err := loadEffectiveConfig()
+	cfg, _, profiles, err := loadEffectiveConfig()
 	if err != nil {
 		return err
+	}
+	if len(profiles) == 0 {
+		return fmt.Errorf("no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles, env_profiles, or add a *file.local")
 	}
 
 	rc := &runContext{

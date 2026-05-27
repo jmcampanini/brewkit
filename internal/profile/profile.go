@@ -67,31 +67,20 @@ func PathFor(dir string, k Kind, profile string) string {
 	return filepath.Join(dir, FilenameFor(k, profile))
 }
 
-// Resolve computes the effective list of active profiles given the loaded
-// config and any --profile flag overrides (nil = no flag passed).
-//
-// Precedence (later wins, each level fully replaces the one below):
-//
-//	defaults → config file → env (cfg.ProfilesEnv) → --profile flag
-//
-// After resolution, the reserved profile "local" is auto-appended if any
-// *file.local exists in cfg.Dir. Listing "local" explicitly via any
-// non-auto source is an error.
-func Resolve(cfg config.Config, flagProfiles []string) ([]string, error) {
-	var effective []string
-
-	switch {
-	case flagProfiles != nil:
-		effective = append([]string(nil), flagProfiles...)
-	case cfg.ProfilesEnv != "":
-		if val, ok := os.LookupEnv(cfg.ProfilesEnv); ok {
-			effective = parseEnvList(val)
-		} else {
-			effective = append([]string(nil), cfg.Profiles...)
+// Resolve computes the effective list of active profiles given the loaded raw
+// config. Config loading has already applied file, B...PROFILES, and
+// --profiles precedence to cfg.Profiles. Runtime derivation appends profiles
+// from the environment variable named by cfg.EnvProfiles, de-duplicates while
+// preserving the first occurrence, validates profile names, then auto-appends
+// the reserved "local" profile if any *file.local exists in cfg.Dir.
+func Resolve(cfg config.Config) ([]string, error) {
+	effective := append([]string(nil), cfg.Profiles...)
+	if cfg.EnvProfiles != "" {
+		if val, ok := os.LookupEnv(cfg.EnvProfiles); ok {
+			effective = append(effective, parseEnvList(val)...)
 		}
-	default:
-		effective = append([]string(nil), cfg.Profiles...)
 	}
+	effective = dedupePreserveOrder(effective)
 
 	for _, p := range effective {
 		if p == LocalName {
@@ -188,6 +177,22 @@ func validProfileName(s string) bool {
 		}
 	}
 	return true
+}
+
+func dedupePreserveOrder(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func parseEnvList(s string) []string {
