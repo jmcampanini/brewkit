@@ -113,6 +113,26 @@ func TestRootProfilesFlagRegisteredAndSingularProfileRemoved(t *testing.T) {
 	}
 }
 
+func TestRootRejectsQuietAndVerboseTogether(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	root := newRootCmd()
+	root.SetArgs([]string{"--quiet", "--verbose"})
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected quiet/verbose mutual exclusion error")
+	}
+	for _, want := range []string{"quiet", "verbose", "none of the others can be"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected native mutual exclusion error to contain %q, got: %v", want, err)
+		}
+	}
+}
+
 func TestApplyCommandsAcceptHideUnchangedFlag(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
@@ -222,6 +242,74 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 	}
 	if len(fake.Calls) != 0 {
 		t.Errorf("dry-run should not call brewer; got %d calls", len(fake.Calls))
+	}
+}
+
+func TestRunApply_Brew_QuietSuccessSilent(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": `brew "ripgrep"  # search` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.quiet = true
+
+	fake := brew.NewFake()
+	useBrewer(t, fake)
+
+	out, errOut := captureOutput(t, func() {
+		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	if out != "" || errOut != "" {
+		t.Errorf("quiet successful run should be silent; stdout=%q stderr=%q", out, errOut)
+	}
+}
+
+type outputFailFake struct {
+	*brew.Fake
+	output string
+}
+
+func (f *outputFailFake) BrewInstall(_ context.Context, name string) (brew.Result, error) {
+	f.Calls = append(f.Calls, brew.FakeCall{Op: brew.OpBrewInstall, Name: name})
+	return brew.Result{Output: f.output}, fmt.Errorf("fake: brew install %s failed", name)
+}
+
+func TestRunApply_Brew_QuietFailureShowsErrorOutputNoSummary(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": `brew "borked"  # broken` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.quiet = true
+
+	fake := &outputFailFake{Fake: brew.NewFake(), output: "==> Downloading\nError: nope\n"}
+	useBrewer(t, fake)
+
+	var runErr error
+	out, errOut := captureOutput(t, func() {
+		runErr = runApply(context.Background(), profile.KindBrew, nil)
+	})
+
+	if runErr == nil {
+		t.Fatal("expected runApply to error")
+	}
+	if out != "" {
+		t.Errorf("quiet failure should not print stdout summary, got %q", out)
+	}
+	for _, want := range []string{"✗ borked: install failed", "==> Downloading", "Error: nope"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("quiet failure stderr missing %q:\n%s", want, errOut)
+		}
+	}
+	if strings.Contains(errOut, "Summary:") {
+		t.Errorf("quiet failure should not print summary:\n%s", errOut)
 	}
 }
 
@@ -398,6 +486,28 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 	want := "⊘ common: no Brewfile, skipping\n\nSummary: 1 skipped\n"
 	if out != want {
 		t.Errorf("unexpected missing-file notice:\nwant: %q\ngot:  %q", want, out)
+	}
+}
+
+func TestRunApply_MissingFileQuietSilent(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{}) // no profile files
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.quiet = true
+
+	fake := brew.NewFake()
+	useBrewer(t, fake)
+
+	out, errOut := captureOutput(t, func() {
+		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	if out != "" || errOut != "" {
+		t.Errorf("quiet run with missing profile files should be silent; stdout=%q stderr=%q", out, errOut)
 	}
 }
 
@@ -1444,6 +1554,30 @@ func TestRunLint_Clean(t *testing.T) {
 	}
 }
 
+func TestRunLint_QuietCleanSilent(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": strings.Join([]string{
+			`brew "abc"  # a`,
+			`brew "def"  # d`,
+			``,
+		}, "\n"),
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.quiet = true
+
+	out := captureStdout(t, func() {
+		if err := runLint(context.Background()); err != nil {
+			t.Errorf("runLint err: %v", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("quiet clean lint should be silent, got %q", out)
+	}
+}
+
 func TestRunLint_ReportsViolations(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
@@ -1459,6 +1593,31 @@ func TestRunLint_ReportsViolations(t *testing.T) {
 			t.Error("expected lint to error")
 		}
 	})
+}
+
+func TestRunLint_QuietReportsViolationsNoSummary(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": `brew "z"  # z` + "\n" + `brew "a"  # a` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.quiet = true
+
+	out := captureStdout(t, func() {
+		err := runLint(context.Background())
+		if err == nil {
+			t.Error("expected lint to error")
+		}
+	})
+
+	if !strings.Contains(out, "[sort-order]") {
+		t.Errorf("quiet lint should print individual violations:\n%s", out)
+	}
+	if strings.Contains(out, "Summary:") {
+		t.Errorf("quiet lint should not print summary:\n%s", out)
+	}
 }
 
 func TestRunConfig_PrintsToml(t *testing.T) {
@@ -1483,6 +1642,24 @@ func TestRunConfig_PrintsToml(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("config output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestRunConfig_QuietStillPrintsToml(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.quiet = true
+
+	out := captureStdout(t, func() {
+		if err := runConfig(context.Background()); err != nil {
+			t.Errorf("runConfig err: %v", err)
+		}
+	})
+	if !strings.Contains(out, `profiles = ["common"]`) {
+		t.Errorf("quiet config should still print config payload:\n%s", out)
 	}
 }
 
@@ -1544,6 +1721,21 @@ func TestRunDocs_PrintsManual(t *testing.T) {
 	})
 	if len(out) == 0 {
 		t.Error("expected non-empty docs output")
+	}
+}
+
+func TestRunDocs_QuietStillPrintsManual(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	flags.quiet = true
+	out := captureStdout(t, func() {
+		if err := runDocs(context.Background()); err != nil {
+			t.Errorf("runDocs err: %v", err)
+		}
+	})
+	if len(out) == 0 {
+		t.Error("quiet docs should still print manual output")
 	}
 }
 

@@ -74,24 +74,25 @@ func TestPrinter_HideUnchangedSuppressesOnlyUpToDate(t *testing.T) {
 	}
 }
 
-func TestPrinter_QuietSuppressesStream(t *testing.T) {
+func TestPrinter_QuietSuppressesStreamAndFooter(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelQuiet)
 	p.Item(SymUpToDate, "git", "(2.45.0)")
 	p.Item(SymAdded, "ripgrep", "")
 	p.Footer()
 
-	got := out.String()
-	want := "Summary: 1 added, 1 up-to-date\n"
-	if got != want {
-		t.Errorf("unexpected quiet output:\nwant: %q\ngot:  %q", want, got)
+	if got := out.String(); got != "" {
+		t.Errorf("quiet success output should be empty, got %q", got)
 	}
 }
 
 func TestPrinter_QuietStillShowsErrors(t *testing.T) {
-	p, _, errOut := newTestPrinter(LevelQuiet)
+	p, out, errOut := newTestPrinter(LevelQuiet)
 	p.Error("git", "install failed", "==> brew error\nblah")
 	p.Footer()
 
+	if got := out.String(); got != "" {
+		t.Errorf("quiet error footer should be suppressed, got stdout %q", got)
+	}
 	got := errOut.String()
 	want := "✗ git: install failed\n" +
 		"    ==> brew error\n" +
