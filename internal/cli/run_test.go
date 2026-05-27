@@ -24,9 +24,9 @@ func resetFlags() {
 
 func useBrewer(t *testing.T, brewer brew.Brewer) {
 	t.Helper()
-	old := brewerFactory
+	previous := brewerFactory
 	brewerFactory = func() brew.Brewer { return brewer }
-	t.Cleanup(func() { brewerFactory = old })
+	t.Cleanup(func() { brewerFactory = previous })
 }
 
 func captureStdout(t *testing.T, fn func()) string {
@@ -35,7 +35,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	return out
 }
 
-func captureOutput(t *testing.T, fn func()) (string, string) {
+func captureOutput(t *testing.T, fn func()) (out string, errOut string) {
 	t.Helper()
 	outR, outW, err := os.Pipe()
 	if err != nil {
@@ -51,34 +51,32 @@ func captureOutput(t *testing.T, fn func()) (string, string) {
 	oldErr := os.Stderr
 	os.Stdout = outW
 	os.Stderr = errW
+
+	outDone := readPipe(outR)
+	errDone := readPipe(errR)
 	defer func() {
 		os.Stdout = oldOut
 		os.Stderr = oldErr
 		_ = outW.Close()
 		_ = errW.Close()
+		out = <-outDone
+		errOut = <-errDone
 		_ = outR.Close()
 		_ = errR.Close()
 	}()
 
-	outDone := make(chan string, 1)
-	go func() {
-		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(outR)
-		outDone <- buf.String()
-	}()
-	errDone := make(chan string, 1)
-	go func() {
-		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(errR)
-		errDone <- buf.String()
-	}()
-
 	fn()
-	os.Stdout = oldOut
-	os.Stderr = oldErr
-	_ = outW.Close()
-	_ = errW.Close()
-	return <-outDone, <-errDone
+	return out, errOut
+}
+
+func readPipe(r *os.File) <-chan string {
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		done <- buf.String()
+	}()
+	return done
 }
 
 // fixtureRepo writes a brewkit.toml plus the requested profile files in a

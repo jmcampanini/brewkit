@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type Level int
@@ -28,7 +30,13 @@ const (
 	SymNotice
 )
 
-const detailIndent = "    "
+const (
+	detailIndent         = "    "
+	spinnerInterval      = 100 * time.Millisecond
+	defaultSpinnerWidth  = 80
+	spinnerTruncateTail  = "…"
+	spinnerClearSequence = "\r\033[2K"
+)
 
 type Summary struct {
 	Added    int
@@ -44,6 +52,8 @@ type PrinterOptions struct {
 	Color         bool
 	DryRun        bool
 	HideUnchanged bool
+	Spinner       bool
+	SpinnerWidth  int
 }
 
 type Printer struct {
@@ -53,11 +63,17 @@ type Printer struct {
 	dryRun        bool
 	hideUnchanged bool
 	color         bool
+	spinner       bool
+	spinnerWidth  int
 	summary       Summary
 	bodyWritten   bool // any non-summary line was written
 }
 
 func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
+	spinnerWidth := opts.SpinnerWidth
+	if opts.Spinner && spinnerWidth <= 0 {
+		spinnerWidth = defaultSpinnerWidth
+	}
 	return &Printer{
 		out:           out,
 		err:           errOut,
@@ -65,6 +81,8 @@ func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 		dryRun:        opts.DryRun,
 		hideUnchanged: opts.HideUnchanged,
 		color:         opts.Color,
+		spinner:       opts.Spinner,
+		spinnerWidth:  spinnerWidth,
 	}
 }
 
@@ -133,6 +151,55 @@ func (p *Printer) Error(name, msg, output string) {
 	}
 }
 
+// WithSpinner runs fn while rendering a transient progress line to stderr.
+// The spinner is intentionally best-effort: it is disabled by default and
+// never contributes to bodyWritten, summaries, or durable stdout output.
+func (p *Printer) WithSpinner(message string, fn func() error) error {
+	if !p.spinner || p.level != LevelNormal || strings.TrimSpace(message) == "" {
+		return fn()
+	}
+
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go p.runSpinner(message, done, stopped)
+
+	defer func() {
+		close(done)
+		<-stopped
+	}()
+	return fn()
+}
+
+func (p *Printer) runSpinner(message string, done <-chan struct{}, stopped chan<- struct{}) {
+	defer close(stopped)
+	ticker := time.NewTicker(spinnerInterval)
+	defer ticker.Stop()
+
+	wrote := false
+	frame := 0
+	for {
+		select {
+		case <-done:
+			if wrote {
+				p.clearSpinner()
+			}
+			return
+		default:
+		}
+
+		p.writeSpinnerFrame(spinnerFrames[frame%len(spinnerFrames)], message)
+		wrote = true
+		frame++
+
+		select {
+		case <-done:
+			p.clearSpinner()
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 func outputLines(content string) []string {
 	return strings.Split(strings.TrimRight(content, "\n"), "\n")
 }
@@ -145,6 +212,29 @@ func (p *Printer) writeBodyOut(line string) {
 func (p *Printer) writeBodyErr(line string) {
 	_, _ = fmt.Fprintln(p.err, line)
 	p.bodyWritten = true
+}
+
+func (p *Printer) writeSpinnerFrame(frame, message string) {
+	line := p.styleDim(p.truncateSpinnerLine(frame + " " + message))
+	_, _ = fmt.Fprintf(p.err, "%s%s", spinnerClearSequence, line)
+}
+
+func (p *Printer) truncateSpinnerLine(line string) string {
+	if p.spinnerWidth <= 0 {
+		return line
+	}
+	// Leave the final column unused. Writing into the last column can trigger
+	// terminal autowrap on some emulators, which would make clearSpinner clear
+	// only the wrapped physical line and leave stale spinner fragments behind.
+	maxWidth := p.spinnerWidth - 1
+	if maxWidth <= 0 {
+		return ""
+	}
+	return ansi.Truncate(line, maxWidth, spinnerTruncateTail)
+}
+
+func (p *Printer) clearSpinner() {
+	_, _ = fmt.Fprint(p.err, spinnerClearSequence)
 }
 
 // Footer is emitted even in quiet mode so scripts have something to grep.
@@ -222,6 +312,8 @@ func symbolText(sym Symbol) string {
 	}
 	return "?"
 }
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 var (
 	styleOK       = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
