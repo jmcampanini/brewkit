@@ -1,9 +1,10 @@
 .PHONY: help build test lint lint-fix fmt fmt-check tidy tidy-check check clean
 
-BUILD_DIR := build
-BINARY    := $(BUILD_DIR)/brewkit
-CMD     := ./cmd/brewkit
-PKG     := ./...
+BUILD_DIR   := build
+BINARY      := $(BUILD_DIR)/brewkit
+CMD         := ./cmd/brewkit
+PKG         := ./...
+GO_FILES    := $(shell git ls-files --cached --others --exclude-standard -- '*.go')
 
 VERSION := $(shell git describe --tags --dirty --always 2>/dev/null || date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X github.com/jmcampanini/brewkit/internal/cli.Version=$(VERSION)"
@@ -27,11 +28,12 @@ lint: ## run golangci-lint
 lint-fix: ## run golangci-lint with --fix
 	golangci-lint run --fix $(PKG)
 
-fmt: ## apply gofmt -w
-	gofmt -w .
+fmt: ## apply gofmt -w to tracked/non-ignored Go files
+	@if [ -n "$(GO_FILES)" ]; then gofmt -w $(GO_FILES); fi
 
-fmt-check: ## fail if gofmt would change files
-	@diff=$$(gofmt -l . 2>&1); rc=$$?; \
+fmt-check: ## fail if tracked/non-ignored Go files need gofmt
+	@if [ -z "$(GO_FILES)" ]; then exit 0; fi; \
+	diff=$$(gofmt -l $(GO_FILES) 2>&1); rc=$$?; \
 	if [ $$rc -ne 0 ]; then echo "gofmt failed (rc=$$rc):"; echo "$$diff"; exit $$rc; fi; \
 	if [ -n "$$diff" ]; then echo "gofmt issues:"; echo "$$diff"; exit 1; fi
 
