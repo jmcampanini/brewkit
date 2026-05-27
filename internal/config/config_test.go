@@ -124,6 +124,23 @@ fail_fast = false
 	}
 }
 
+func TestLoad_EmptyDirErrors(t *testing.T) {
+	unsetEnv(t, "BREWKIT_PROFILES")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "brewkit.toml")
+	if err := writeFile(t, path, []byte(`dir = ""`)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := LoadWithReport(path, nil)
+	if err == nil {
+		t.Fatal("LoadWithReport should reject empty dir")
+	}
+	if !strings.Contains(err.Error(), "dir must not be empty") {
+		t.Fatalf("error should mention empty dir, got: %v", err)
+	}
+}
+
 func TestLoad_PartialFileKeepsDefaults(t *testing.T) {
 	unsetEnv(t, "BREWKIT_PROFILES")
 	dir := t.TempDir()

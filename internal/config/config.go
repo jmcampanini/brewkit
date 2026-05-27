@@ -95,6 +95,9 @@ func LoadWithReport(path string, flags *pflag.FlagSet) (Config, LoadReport, erro
 	if err != nil {
 		return Config{}, LoadReport{}, err
 	}
+	if cfg.Dir == "" {
+		return Config{}, LoadReport{}, fmt.Errorf("dir must not be empty")
+	}
 	return cfg, report, nil
 }
 
