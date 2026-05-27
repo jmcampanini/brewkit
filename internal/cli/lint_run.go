@@ -13,16 +13,26 @@ import (
 	"github.com/jmcampanini/brewkit/internal/profile"
 )
 
+func profilesFlagChanged() bool {
+	if configFlagSet == nil {
+		return false
+	}
+	flag := configFlagSet.Lookup("profiles")
+	return flag != nil && flag.Changed
+}
+
 func runLint(_ context.Context) error {
-	cfg, err := config.Load(flags.configPath)
+	cfg, _, err := config.LoadWithReport(flags.configPath, configFlagSet)
 	if err != nil {
 		return err
 	}
 
-	// --profile narrows the scan; otherwise lint scans every discoverable
+	// --profiles narrows the scan; otherwise lint scans every discoverable
 	// profile in the directory regardless of what's currently active.
-	profiles := flags.profiles
-	if len(profiles) == 0 {
+	var profiles []string
+	if profilesFlagChanged() {
+		profiles = append([]string(nil), cfg.Profiles...)
+	} else {
 		discovered, err := profile.Discover(cfg.Dir)
 		if err != nil {
 			return err

@@ -18,6 +18,8 @@ import (
 // resetFlags zeroes the package-level flags var so test cases don't bleed.
 func resetFlags() {
 	flags = globalFlags{}
+	configFlagSet = nil
+	_ = os.Unsetenv("BREWKIT_PROFILES")
 }
 
 func useBrewer(t *testing.T, brewer brew.Brewer) {
@@ -85,7 +87,7 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["common"]` + "\n" +
-		`profiles_env = ""` + "\n"
+		`env_profiles = ""` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +98,19 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 		}
 	}
 	return dir
+}
+
+func TestRootProfilesFlagRegisteredAndSingularProfileRemoved(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	root := newRootCmd()
+	if root.PersistentFlags().Lookup("profiles") == nil {
+		t.Fatal("root should register --profiles")
+	}
+	if root.PersistentFlags().Lookup("profile") != nil {
+		t.Fatal("root should not preserve old --profile flag")
+	}
 }
 
 func TestApplyCommandsAcceptHideUnchangedFlag(t *testing.T) {
@@ -118,27 +133,25 @@ func TestApplyCommandsAcceptHideUnchangedFlag(t *testing.T) {
 	}
 }
 
-func TestRunApply_ConfigOmittedDir_ResolvesAgainstConfigPath(t *testing.T) {
+func TestRunApply_ConfigOmittedDir_ResolvesAgainstProcessCWD(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
-	// A brewkit.toml in dir/ that does NOT set `dir` should still
-	// cause profile files to be looked up from dir/ when brewkit is
-	// invoked with --config dir/brewkit.toml from an unrelated CWD.
-	dir := t.TempDir()
-	tomlPath := filepath.Join(dir, "brewkit.toml")
+	// A brewkit.toml that omits `dir` leaves the raw default `.` in place.
+	// Runtime file lookups therefore resolve relative to the process CWD,
+	// not relative to the config file's directory.
+	configDir := t.TempDir()
+	tomlPath := filepath.Join(configDir, "brewkit.toml")
 	if err := os.WriteFile(tomlPath,
-		[]byte(`profiles = ["common"]`+"\n"+`profiles_env = ""`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "Brewfile.common"),
-		[]byte(`brew "git"  # vcs`+"\n"), 0o644); err != nil {
+		[]byte(`profiles = ["common"]`+"\n"+`env_profiles = ""`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Change to an unrelated CWD to make sure `dir = "."` can't
-	// accidentally resolve to the right place.
 	cwd := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwd, "Brewfile.common"),
+		[]byte(`brew "git"  # vcs`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	t.Chdir(cwd)
 
 	flags.configPath = tomlPath
@@ -154,7 +167,7 @@ func TestRunApply_ConfigOmittedDir_ResolvesAgainstConfigPath(t *testing.T) {
 	})
 
 	if !strings.Contains(out, "+ git") {
-		t.Errorf("expected '+ git' in output — profile files must be discovered next to the config file:\n%s", out)
+		t.Errorf("expected '+ git' in output — profile files must be discovered under process CWD:\n%s", out)
 	}
 }
 
@@ -388,6 +401,35 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 	}
 }
 
+func TestRunApply_NoActiveProfilesErrors(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := t.TempDir()
+	tomlPath := filepath.Join(dir, "brewkit.toml")
+	if err := os.WriteFile(tomlPath, []byte(`dir = "`+dir+`"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Brewfile.common"), []byte(`brew "git"  # vcs`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	flags.configPath = tomlPath
+
+	fake := brew.NewFake()
+	useBrewer(t, fake)
+
+	err := runApply(context.Background(), profile.KindBrew, nil)
+	if err == nil {
+		t.Fatal("expected no-active-profiles error")
+	}
+	if !strings.Contains(err.Error(), "no active profiles") {
+		t.Fatalf("error = %v, want no active profiles", err)
+	}
+	if len(fake.Calls) != 0 {
+		t.Fatalf("no active profiles should not call brewer, got %+v", fake.Calls)
+	}
+}
+
 func TestRunApply_PositionalFilter(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
@@ -549,7 +591,7 @@ func TestRunApply_FailFastFalse_ContinuesAndReturnsError(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["common"]` + "\n" +
-		`profiles_env = ""` + "\n" +
+		`env_profiles = ""` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -907,7 +949,7 @@ func TestRunApply_DryRun_LayeredProfilesProjectsState(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["a", "b"]` + "\n" +
-		`profiles_env = ""` + "\n"
+		`env_profiles = ""` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -970,7 +1012,7 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["common"]` + "\n" +
-		`profiles_env = ""` + "\n" +
+		`env_profiles = ""` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -1015,7 +1057,7 @@ func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["common"]` + "\n" +
-		`profiles_env = ""` + "\n" +
+		`env_profiles = ""` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -1100,7 +1142,7 @@ func TestRunApply_Head_RetryAfterFailure_LayeredProfiles(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["a", "b"]` + "\n" +
-		`profiles_env = ""` + "\n" +
+		`env_profiles = ""` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -1179,7 +1221,7 @@ func TestRunApply_Head_HideUnchangedHidesUpToDateAndDuplicate(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["a", "b"]` + "\n" +
-		`profiles_env = ""` + "\n"
+		`env_profiles = ""` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1219,7 +1261,7 @@ func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["a", "b"]` + "\n" +
-		`profiles_env = ""` + "\n"
+		`env_profiles = ""` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1258,7 +1300,7 @@ func TestRunApply_Head_LayeredProfilesDeduped(t *testing.T) {
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
 		`profiles = ["a", "b"]` + "\n" +
-		`profiles_env = ""` + "\n"
+		`env_profiles = ""` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1432,9 +1474,38 @@ func TestRunConfig_PrintsToml(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "profiles") || !strings.Contains(out, "common") {
-		t.Errorf("expected toml output:\n%s", out)
+	for _, want := range []string{
+		`profiles = ["common"]`,
+		"# provenance:",
+		"# effective:",
+		`# effective_profiles = ["common"]`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("config output missing %q:\n%s", want, out)
+		}
 	}
+}
+
+func TestRunConfig_EffectiveDirAbsError(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+
+	oldAbs := filepathAbs
+	filepathAbs = func(string) (string, error) { return "", errors.New("cwd unavailable") }
+	defer func() { filepathAbs = oldAbs }()
+
+	captureStdout(t, func() {
+		err := runConfig(context.Background())
+		if err == nil {
+			t.Fatal("expected effective dir resolution error")
+		}
+		if !strings.Contains(err.Error(), "resolve effective dir") || !strings.Contains(err.Error(), "cwd unavailable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestRunConfig_FiltersAutoLocal(t *testing.T) {

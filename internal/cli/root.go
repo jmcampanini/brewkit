@@ -1,13 +1,14 @@
 package cli
 
 import (
+	"github.com/jmcampanini/brewkit/internal/config"
 	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type globalFlags struct {
 	configPath    string
-	profiles      []string
 	dryRun        bool
 	verbose       bool
 	quiet         bool
@@ -15,6 +16,7 @@ type globalFlags struct {
 }
 
 var flags globalFlags
+var configFlagSet *pflag.FlagSet
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -27,7 +29,10 @@ func newRootCmd() *cobra.Command {
 	}
 
 	root.PersistentFlags().StringVar(&flags.configPath, "config", "", "path to brewkit.toml (defaults to ./brewkit.toml if present)")
-	root.PersistentFlags().StringSliceVar(&flags.profiles, "profile", nil, "active profile (repeatable; replaces config/env)")
+	if err := config.RegisterFlags(root.PersistentFlags()); err != nil {
+		panic(err)
+	}
+	configFlagSet = root.PersistentFlags()
 	root.PersistentFlags().BoolVar(&flags.dryRun, "dry-run", false, "compute changes without applying them")
 	root.PersistentFlags().BoolVarP(&flags.verbose, "verbose", "v", false, "stream raw brew output for every operation")
 	root.PersistentFlags().BoolVarP(&flags.quiet, "quiet", "q", false, "suppress per-item output; show only errors and final summary")

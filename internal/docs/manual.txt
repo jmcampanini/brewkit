@@ -19,32 +19,42 @@ Configuration
 -------------
 
 A brewkit.toml in the current working directory is loaded by default;
-pass --config <path> to use a different file. Running with no config
+pass --config <path> to use a different file. An implicit missing file
+is allowed; an explicit missing file is an error. Running with no config
 falls back to defaults:
 
   dir          = "."
-  profiles     = ["common"]
-  profiles_env = "BREWKIT_PROFILES"
+  profiles     = []
+  env_profiles = ""
   fail_fast    = true
 
 Keys:
-  dir           Directory holding the *file.<profile> files.
-  profiles      Default active profile list.
-  profiles_env  Environment variable that overrides `profiles`.
-                Set to "" to disable env-based override entirely.
-                Read as a comma-separated list, whitespace tolerant.
+  dir           Directory holding the *file.<profile> files. Relative
+                paths are resolved by the process current working
+                directory, not by the config file's directory.
+  profiles      Raw active profile list.
+  env_profiles  Name of an additional environment variable whose
+                comma-separated values append to `profiles`.
   fail_fast     Stop on first error (true) or report at end (false).
 
-Profile selection precedence (later wins, each level fully replaces
-the one below):
+BREWKIT_PROFILES overrides the raw `profiles` value:
 
-  1. defaults
-  2. brewkit.toml `profiles`
-  3. env var named by `profiles_env`
-  4. --profile flags (repeatable)
-  5. local profile auto-appended if *file.local exists
+  BREWKIT_PROFILES=work,personal brewkit brew
 
-Print the effective config any time with:
+Profile flags use a comma-separated list and override file/env raw
+profiles:
+
+  brewkit --profiles work,personal brew
+
+Effective profiles are derived from raw `profiles`, appended values
+from the variable named by `env_profiles`, de-duplication preserving
+first occurrence, validation, and finally automatic `local` append when
+any *file.local exists. The name "local" is reserved and cannot be
+listed explicitly. Apply commands require at least one effective
+profile.
+
+Print the loaded config, provenance, and effective runtime comments any
+time with:
 
   brewkit config
 
@@ -57,7 +67,7 @@ Commands
   brewkit head [FORMULA]  Apply Headfile entries (SHA-idempotent).
   brewkit cask [CASK]     Apply Caskfile entries (greedy upgrades).
   brewkit lint            Validate profile files.
-  brewkit config          Print effective config as TOML.
+  brewkit config          Print loaded config, provenance, and effective values.
   brewkit docs            Print this manual.
 
 Each apply command accepts an optional positional arg to scope the
@@ -69,11 +79,11 @@ Apply-command flags:
                     entries; summaries still count them
 
 Global flags:
-  --config PATH        explicit path to brewkit.toml
-  --profile NAME       repeatable; replaces config/env
-  --dry-run            compute changes without applying
-  -v, --verbose        stream raw brew output for every operation
-  -q, --quiet          suppress per-item stream; show errors + summary
+  --config PATH          explicit path to brewkit.toml
+  --profiles LIST        comma-separated profiles; replaces file/env raw profiles
+  --dry-run              compute changes without applying
+  -v, --verbose          stream raw brew output for every operation
+  -q, --quiet            suppress per-item stream; show errors + summary
 
 
 Output

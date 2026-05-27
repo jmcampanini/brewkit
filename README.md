@@ -17,7 +17,7 @@ brew upgrade --fetch-HEAD brewkit
 
 ## Quick start
 
-Create `brewkit.toml` and one or more profile files in the same directory:
+Create `brewkit.toml` and one or more profile files:
 
 ```toml
 # brewkit.toml
@@ -49,6 +49,8 @@ brewkit brew
 brewkit head
 brewkit cask
 ```
+
+There is no implicit `common` profile; set `profiles` in `brewkit.toml`, use `BREWKIT_PROFILES=work,personal`, or pass `--profiles work,personal`.
 
 Use `--hide-unchanged` with `tap`, `brew`, `head`, or `cask` to hide already-satisfied per-item lines while keeping the final summary accurate.
 
