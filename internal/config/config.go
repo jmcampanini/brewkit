@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	configloader "github.com/jmcampanini/go-config-loader"
@@ -105,6 +106,13 @@ func newFileLoader(path string) (configloader.ConfigLoader[Config], error) {
 	abs, err := filepath.Abs(configFileName)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", configFileName, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("stat implicit config file %q: %w", abs, err)
+	}
+	if err == nil && info.IsDir() {
+		return nil, fmt.Errorf("config file %q is a directory", abs)
 	}
 	return configloader.NewPickLastFileLoader[Config](configloader.File(abs))
 }

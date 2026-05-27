@@ -1519,6 +1519,28 @@ func TestRunConfig_PrintsToml(t *testing.T) {
 	}
 }
 
+func TestRunConfig_EffectiveDirAbsError(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+
+	oldAbs := filepathAbs
+	filepathAbs = func(string) (string, error) { return "", errors.New("cwd unavailable") }
+	defer func() { filepathAbs = oldAbs }()
+
+	captureStdout(t, func() {
+		err := runConfig(context.Background())
+		if err == nil {
+			t.Fatal("expected effective dir resolution error")
+		}
+		if !strings.Contains(err.Error(), "resolve effective dir") || !strings.Contains(err.Error(), "cwd unavailable") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestRunConfig_FiltersAutoLocal(t *testing.T) {
 	resetFlags()
 	defer resetFlags()

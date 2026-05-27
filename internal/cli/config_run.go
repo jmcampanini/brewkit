@@ -11,10 +11,17 @@ import (
 	"github.com/jmcampanini/go-config-loader/configreporter"
 )
 
+var filepathAbs = filepath.Abs
+
 func runConfig(_ context.Context) error {
 	cfg, report, profiles, err := loadEffectiveConfig()
 	if err != nil {
 		return err
+	}
+
+	effectiveDir, err := filepathAbs(cfg.Dir)
+	if err != nil {
+		return fmt.Errorf("resolve effective dir %q: %w", cfg.Dir, err)
 	}
 
 	reporter := configreporter.New(cfg, report)
@@ -47,10 +54,6 @@ func runConfig(_ context.Context) error {
 		return err
 	}
 
-	effectiveDir := cfg.Dir
-	if abs, err := filepath.Abs(cfg.Dir); err == nil {
-		effectiveDir = abs
-	}
 	if _, err := fmt.Fprintln(os.Stdout, "# effective:"); err != nil {
 		return err
 	}

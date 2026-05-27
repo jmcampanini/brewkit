@@ -45,10 +45,44 @@ func TestLoad_MissingImplicitFallsBackToDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_ImplicitConfigDirectoryErrors(t *testing.T) {
+	unsetEnv(t, "BREWKIT_PROFILES")
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Mkdir("brewkit.toml", 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := LoadWithReport("", nil)
+	if err == nil {
+		t.Fatal("LoadWithReport should error when implicit brewkit.toml is a directory")
+	}
+	if !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("error should mention directory, got: %v", err)
+	}
+}
+
 func TestLoad_MissingExplicitErrors(t *testing.T) {
 	unsetEnv(t, "BREWKIT_PROFILES")
 	if _, _, err := LoadWithReport("/nonexistent/brewkit.toml", nil); err == nil {
 		t.Fatal("LoadWithReport with nonexistent explicit path should error")
+	}
+}
+
+func TestLoad_ExplicitConfigDirectoryErrors(t *testing.T) {
+	unsetEnv(t, "BREWKIT_PROFILES")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "brewkit.toml")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := LoadWithReport(path, nil)
+	if err == nil {
+		t.Fatal("LoadWithReport should error when explicit config is a directory")
+	}
+	if !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("error should mention directory, got: %v", err)
 	}
 }
 
