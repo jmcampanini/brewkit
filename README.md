@@ -50,4 +50,6 @@ brewkit head
 brewkit cask
 ```
 
+Use `--hide-unchanged` with `tap`, `brew`, `head`, or `cask` to hide already-satisfied per-item lines while keeping the final summary accurate.
+
 Run `brewkit docs` for the full file format and config reference.

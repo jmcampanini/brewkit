@@ -52,12 +52,11 @@ type Brewer interface {
 	BrewUpgrade(ctx context.Context, name string) (Result, error)
 
 	HeadInstall(ctx context.Context, name string) (Result, error)
-	// HeadReinstall removes the current install and reinstalls from
-	// HEAD. Invoked both when the installed HEAD SHA has moved and when
-	// the formula is currently installed at a non-HEAD version. If the
-	// uninstall step succeeds and the install step fails, the formula
-	// is left MISSING from the system — implementations must make that
-	// clear in the returned error.
+	// HeadReinstall removes the current HEAD install and reinstalls from
+	// HEAD when the installed HEAD SHA has moved. If the uninstall step
+	// succeeds and the install step fails, the formula is left MISSING
+	// from the system — implementations must make that clear in the
+	// returned error.
 	HeadReinstall(ctx context.Context, name string) (Result, error)
 	// HeadInstalledSHA returns the short SHA of the installed HEAD build.
 	// installedAsHead is false if a non-HEAD version is installed;

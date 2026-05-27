@@ -22,26 +22,54 @@ func resetFlags() {
 
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
+	out, _ := captureOutput(t, fn)
+	return out
+}
+
+func captureOutput(t *testing.T, fn func()) (string, string) {
+	t.Helper()
+	outR, outW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := os.Stdout
-	os.Stdout = w
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		_ = outR.Close()
+		_ = outW.Close()
+		t.Fatal(err)
+	}
+	oldOut := os.Stdout
+	oldErr := os.Stderr
+	os.Stdout = outW
+	os.Stderr = errW
 	defer func() {
-		os.Stdout = old
+		os.Stdout = oldOut
+		os.Stderr = oldErr
+		_ = outW.Close()
+		_ = errW.Close()
+		_ = outR.Close()
+		_ = errR.Close()
 	}()
 
-	done := make(chan string)
+	outDone := make(chan string, 1)
 	go func() {
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(r)
-		done <- buf.String()
+		_, _ = buf.ReadFrom(outR)
+		outDone <- buf.String()
+	}()
+	errDone := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(errR)
+		errDone <- buf.String()
 	}()
 
 	fn()
-	_ = w.Close()
-	return <-done
+	os.Stdout = oldOut
+	os.Stderr = oldErr
+	_ = outW.Close()
+	_ = errW.Close()
+	return <-outDone, <-errDone
 }
 
 // fixtureRepo writes a brewkit.toml plus the requested profile files in a
@@ -63,6 +91,26 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 		}
 	}
 	return dir
+}
+
+func TestApplyCommandsAcceptHideUnchangedFlag(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	root := newRootCmd()
+	for _, name := range []string{"tap", "brew", "cask", "head"} {
+		cmd, _, err := root.Find([]string{name})
+		if err != nil {
+			t.Fatalf("find %s: %v", name, err)
+		}
+		flag := cmd.Flags().Lookup("hide-unchanged")
+		if flag == nil {
+			t.Fatalf("%s missing --hide-unchanged", name)
+		}
+		if err := cmd.Flags().Parse([]string{"--hide-unchanged"}); err != nil {
+			t.Fatalf("%s should accept --hide-unchanged: %v", name, err)
+		}
+	}
 }
 
 func TestRunApply_ConfigOmittedDir_ResolvesAgainstConfigPath(t *testing.T) {
@@ -153,8 +201,9 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "+ ripgrep") || !strings.Contains(out, "(dry-run)") {
-		t.Errorf("expected dry-run output:\n%s", out)
+	want := "+ ripgrep (dry-run)\n\nSummary: 1 added\n"
+	if out != want {
+		t.Errorf("unexpected dry-run output:\nwant: %q\ngot:  %q", want, out)
 	}
 	if len(fake.Calls) != 0 {
 		t.Errorf("dry-run should not call brewer; got %d calls", len(fake.Calls))
@@ -192,6 +241,104 @@ func TestRunApply_Brew_UpgradesAndUpToDate(t *testing.T) {
 	}
 	if !strings.Contains(out, "Summary: 1 upgraded, 1 up-to-date") {
 		t.Errorf("expected summary:\n%s", out)
+	}
+}
+
+func TestRunApply_Brew_HideUnchangedKeepsChangesAndSummary(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": `brew "ripgrep"  # search` + "\n" +
+			`brew "neovim"   # editor` + "\n" +
+			`brew "git"      # vcs` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.hideUnchanged = true
+
+	fake := brew.NewFake()
+	fake.FormulasMap["neovim"] = brew.FormulaState{
+		Installed: true, Version: "0.10.0", Outdated: true, OutdatedTo: "0.10.2",
+	}
+	fake.FormulasMap["git"] = brew.FormulaState{Installed: true, Version: "2.45.0"}
+	brewerFactory = func() brew.Brewer { return fake }
+	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+
+	out := captureStdout(t, func() {
+		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "+ ripgrep") {
+		t.Errorf("added formula should stay visible with --hide-unchanged:\n%s", out)
+	}
+	if !strings.Contains(out, "↑ neovim 0.10.0 → 0.10.2") {
+		t.Errorf("upgraded formula should stay visible with --hide-unchanged:\n%s", out)
+	}
+	if strings.Contains(out, "✓ git") {
+		t.Errorf("up-to-date formula should be hidden with --hide-unchanged:\n%s", out)
+	}
+	if !strings.Contains(out, "Summary: 1 added, 1 upgraded, 1 up-to-date") {
+		t.Errorf("summary should count hidden up-to-date entries:\n%s", out)
+	}
+}
+
+func TestRunApply_Tap_HideUnchanged(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Tapfile.common": `homebrew/core` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.hideUnchanged = true
+
+	fake := brew.NewFake()
+	fake.TapsSet["homebrew/core"] = true
+	brewerFactory = func() brew.Brewer { return fake }
+	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+
+	out := captureStdout(t, func() {
+		if err := runApply(context.Background(), profile.KindTap, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "homebrew/core") {
+		t.Errorf("up-to-date tap should be hidden with --hide-unchanged:\n%s", out)
+	}
+	if !strings.Contains(out, "Summary: 1 up-to-date") {
+		t.Errorf("summary should count hidden tap:\n%s", out)
+	}
+}
+
+func TestRunApply_Cask_HideUnchanged(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Caskfile.common": `iterm2  # terminal` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.hideUnchanged = true
+
+	fake := brew.NewFake()
+	fake.CasksMap["iterm2"] = brew.CaskState{Installed: true, Version: "3.5.0"}
+	brewerFactory = func() brew.Brewer { return fake }
+	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+
+	out := captureStdout(t, func() {
+		if err := runApply(context.Background(), profile.KindCask, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "iterm2") {
+		t.Errorf("up-to-date cask should be hidden with --hide-unchanged:\n%s", out)
+	}
+	if !strings.Contains(out, "Summary: 1 up-to-date") {
+		t.Errorf("summary should count hidden cask:\n%s", out)
 	}
 }
 
@@ -239,8 +386,9 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "common: no Brewfile") {
-		t.Errorf("expected missing-file notice:\n%s", out)
+	want := "⊘ common: no Brewfile, skipping\n\nSummary: 1 skipped\n"
+	if out != want {
+		t.Errorf("unexpected missing-file notice:\nwant: %q\ngot:  %q", want, out)
 	}
 }
 
@@ -667,39 +815,75 @@ func TestRunApply_EnsureStateFailure(t *testing.T) {
 	})
 }
 
-func TestRunApply_Head_NoSourceSkipsReinstall(t *testing.T) {
+func TestRunApply_Head_InstalledStableErrorsNoReinstall(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
 	dir := fixtureRepo(t, map[string]string{
-		"Headfile.common": `direnv  # was head, now stable` + "\n",
+		"Headfile.common": `direnv  # stable install only` + "\n",
 	})
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
 
-	fake := brew.NewFake()
-	// direnv is currently installed at a non-HEAD version.
-	fake.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
-	// HeadLatest empty + HeadHasURL false → fake reports hasHead=false.
+	base := brew.NewFake()
+	base.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
+	fake := &headLatestErrFake{Fake: base, errName: "direnv", errMsg: "network flake"}
 	brewerFactory = func() brew.Brewer { return fake }
 	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
 
-	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
-			t.Errorf("runApply err: %v", err)
-		}
+	var runErr error
+	out, errOut := captureOutput(t, func() {
+		runErr = runApply(context.Background(), profile.KindHead, nil)
 	})
 
-	if !strings.Contains(out, "no HEAD source") {
-		t.Errorf("expected 'no HEAD source' notice:\n%s", out)
+	if runErr == nil || !strings.Contains(runErr.Error(), "installed but not as HEAD") {
+		t.Fatalf("expected stable HEAD entry error, got %v", runErr)
+	}
+	if !strings.Contains(errOut, "✗ direnv: installed but not as HEAD") {
+		t.Errorf("expected error icon for stable install:\n%s", errOut)
+	}
+	if !strings.Contains(out, "Summary: 1 failed") {
+		t.Errorf("expected failure summary:\n%s", out)
 	}
 	for _, c := range fake.Calls {
 		if c.Op == brew.OpHeadReinstall {
-			t.Errorf("HeadReinstall should NOT be called when formula has no HEAD source; got %+v", c)
+			t.Errorf("HeadReinstall should NOT be called for a stable install; got %+v", c)
 		}
 	}
 }
 
-func TestRunApply_Head_NoSourceSkipsInstall(t *testing.T) {
+func TestRunApply_Head_InstalledStableWithoutHeadSourceErrorsNoReinstall(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Headfile.common": `direnv  # no source upstream` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+
+	fake := brew.NewFake()
+	fake.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
+	brewerFactory = func() brew.Brewer { return fake }
+	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+
+	var runErr error
+	_, errOut := captureOutput(t, func() {
+		runErr = runApply(context.Background(), profile.KindHead, nil)
+	})
+
+	if runErr == nil || !strings.Contains(runErr.Error(), "installed but not as HEAD") {
+		t.Fatalf("expected stable HEAD entry error, got %v", runErr)
+	}
+	if !strings.Contains(errOut, "✗ direnv: installed but not as HEAD") {
+		t.Errorf("expected error icon for stable install:\n%s", errOut)
+	}
+	for _, c := range fake.Calls {
+		if c.Op == brew.OpHeadReinstall {
+			t.Errorf("HeadReinstall should NOT be called for a stable install; got %+v", c)
+		}
+	}
+}
+
+func TestRunApply_Head_NoSourceErrorsNoInstall(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
@@ -707,6 +891,7 @@ func TestRunApply_Head_NoSourceSkipsInstall(t *testing.T) {
 		"Headfile.common": `lonely  # no head source upstream` + "\n",
 	})
 	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.hideUnchanged = true
 
 	fake := brew.NewFake()
 	// HeadHasURL["lonely"] is false (zero value); HeadLatest also empty.
@@ -714,14 +899,19 @@ func TestRunApply_Head_NoSourceSkipsInstall(t *testing.T) {
 	brewerFactory = func() brew.Brewer { return fake }
 	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
 
-	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
-			t.Errorf("runApply err: %v", err)
-		}
+	var runErr error
+	out, errOut := captureOutput(t, func() {
+		runErr = runApply(context.Background(), profile.KindHead, nil)
 	})
 
-	if !strings.Contains(out, "no HEAD source") {
-		t.Errorf("expected 'no HEAD source' notice:\n%s", out)
+	if runErr == nil || !strings.Contains(runErr.Error(), "no HEAD source") {
+		t.Fatalf("expected no HEAD source error, got %v", runErr)
+	}
+	if !strings.Contains(errOut, "✗ lonely: no HEAD source") {
+		t.Errorf("expected error icon for no HEAD source:\n%s", errOut)
+	}
+	if !strings.Contains(out, "Summary: 1 failed") {
+		t.Errorf("expected failure summary:\n%s", out)
 	}
 	for _, c := range fake.Calls {
 		if c.Op == brew.OpHeadInstall {
@@ -840,97 +1030,61 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 	}
 }
 
-func TestRunApply_Head_InstalledStableToHead_DryRun(t *testing.T) {
+func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
-	dir := fixtureRepo(t, map[string]string{
-		"Headfile.common": `tmux  # mux` + "\n",
-	})
-	flags.configPath = filepath.Join(dir, "brewkit.toml")
-	flags.dryRun = true
+	dir := t.TempDir()
+	tomlPath := filepath.Join(dir, "brewkit.toml")
+	toml := `dir = "` + dir + `"` + "\n" +
+		`profiles = ["common"]` + "\n" +
+		`profiles_env = ""` + "\n" +
+		`fail_fast = false` + "\n"
+	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Headfile.common"),
+		[]byte(`lonely  # no source`+"\n"+`tmux  # stable`+"\n"+`ok  # valid`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	flags.configPath = tomlPath
 
 	fake := brew.NewFake()
 	fake.FormulasMap["tmux"] = brew.FormulaState{Installed: true, Version: "3.4"}
 	fake.HeadLatest["tmux"] = "abc1234"
 	fake.HeadHasURL["tmux"] = true
+	fake.HeadLatest["ok"] = "def5678"
+	fake.HeadHasURL["ok"] = true
 	brewerFactory = func() brew.Brewer { return fake }
 	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
 
-	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
-			t.Errorf("runApply err: %v", err)
-		}
+	var runErr error
+	out, errOut := captureOutput(t, func() {
+		runErr = runApply(context.Background(), profile.KindHead, nil)
 	})
 
-	if !strings.Contains(out, "(installed → HEAD)") {
-		t.Errorf("expected '(installed → HEAD)' dry-run projection:\n%s", out)
+	if runErr == nil {
+		t.Fatal("expected aggregated error")
 	}
-	for _, c := range fake.Calls {
-		if c.Op == brew.OpHeadReinstall {
-			t.Errorf("dry-run must not reinstall: %+v", c)
+	for _, want := range []string{"2 head operation(s) failed", "lonely: no HEAD source", "tmux: installed but not as HEAD"} {
+		if !strings.Contains(runErr.Error(), want) {
+			t.Errorf("aggregated error missing %q: %v", want, runErr)
 		}
 	}
-}
-
-func TestRunApply_Head_InstalledStableToHead_RealRun(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
-
-	dir := fixtureRepo(t, map[string]string{
-		"Headfile.common": `tmux  # mux` + "\n",
-	})
-	flags.configPath = filepath.Join(dir, "brewkit.toml")
-
-	fake := brew.NewFake()
-	fake.FormulasMap["tmux"] = brew.FormulaState{Installed: true, Version: "3.4"}
-	fake.HeadLatest["tmux"] = "abc1234"
-	fake.HeadHasURL["tmux"] = true
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
-
-	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
-			t.Errorf("runApply err: %v", err)
-		}
-	})
-
-	if !strings.Contains(out, "installed → HEAD-") {
-		t.Errorf("expected 'installed → HEAD-' in real-run output:\n%s", out)
+	if !strings.Contains(errOut, "✗ lonely: no HEAD source") || !strings.Contains(errOut, "✗ tmux: installed but not as HEAD") {
+		t.Errorf("expected both invalid head entries on stderr:\n%s", errOut)
 	}
-	reinstalls := 0
+	if !strings.Contains(out, "+ ok") {
+		t.Errorf("fail_fast=false should continue to valid entry:\n%s", out)
+	}
+	if !fake.FormulasMap["ok"].Installed {
+		t.Error("valid entry should be installed after earlier errors")
+	}
 	for _, c := range fake.Calls {
 		if c.Op == brew.OpHeadReinstall && c.Name == "tmux" {
-			reinstalls++
+			t.Errorf("stable install should not be reinstalled: %+v", c)
 		}
 	}
-	if reinstalls != 1 {
-		t.Errorf("expected 1 HeadReinstall, got %d", reinstalls)
-	}
-}
-
-func TestRunApply_Head_ReinstallFailure_FromStable(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
-
-	dir := fixtureRepo(t, map[string]string{
-		"Headfile.common": `tmux  # mux` + "\n",
-	})
-	flags.configPath = filepath.Join(dir, "brewkit.toml")
-
-	fake := brew.NewFake()
-	fake.FormulasMap["tmux"] = brew.FormulaState{Installed: true, Version: "3.4"}
-	fake.HeadLatest["tmux"] = "abc1234"
-	fake.HeadHasURL["tmux"] = true
-	fake.FailOps[brew.OpHeadReinstall] = map[string]bool{"tmux": true}
-	brewerFactory = func() brew.Brewer { return fake }
-	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
-
-	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
-			t.Error("expected runApply to error on HeadReinstall failure")
-		}
-	})
 }
 
 // retryFailFake fails HeadInstall on the first call to a given name
@@ -1041,6 +1195,47 @@ func TestRunApply_UnknownLineFailsRun(t *testing.T) {
 			t.Error("expected runApply to fail on LineUnknown content")
 		}
 	})
+}
+
+func TestRunApply_Head_HideUnchangedHidesUpToDateAndDuplicate(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := t.TempDir()
+	tomlPath := filepath.Join(dir, "brewkit.toml")
+	toml := `dir = "` + dir + `"` + "\n" +
+		`profiles = ["a", "b"]` + "\n" +
+		`profiles_env = ""` + "\n"
+	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Headfile.a"), []byte(`tmux  # mux`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Headfile.b"), []byte(`tmux  # mux`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	flags.configPath = tomlPath
+	flags.hideUnchanged = true
+
+	fake := brew.NewFake()
+	fake.HeadInstalls["tmux"] = "abc1234"
+	fake.HeadLatest["tmux"] = "abc1234"
+	brewerFactory = func() brew.Brewer { return fake }
+	defer func() { brewerFactory = func() brew.Brewer { return brew.NewExec() } }()
+
+	out := captureStdout(t, func() {
+		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "tmux") || strings.Contains(out, "already processed") {
+		t.Errorf("up-to-date and duplicate HEAD lines should be hidden with --hide-unchanged:\n%s", out)
+	}
+	if !strings.Contains(out, "Summary: 2 up-to-date") {
+		t.Errorf("summary should count hidden HEAD up-to-date and duplicate entries:\n%s", out)
+	}
 }
 
 func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {

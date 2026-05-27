@@ -6,12 +6,9 @@ import (
 )
 
 func newBrewCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "brew [FORMULA]",
-		Short: "Apply Brewfile entries for active profiles",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApply(cmd.Context(), profile.KindBrew, args)
-		},
-	}
+	return newApplyCmd(
+		"brew [FORMULA]",
+		"Apply Brewfile entries for active profiles",
+		profile.KindBrew,
+	)
 }

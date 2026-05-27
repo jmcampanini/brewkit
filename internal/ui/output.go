@@ -28,6 +28,8 @@ const (
 	SymNotice
 )
 
+const detailIndent = "    "
+
 type Summary struct {
 	Added    int
 	Upgraded int
@@ -36,24 +38,34 @@ type Summary struct {
 	Skipped  int
 }
 
+// PrinterOptions configures a Printer.
+type PrinterOptions struct {
+	Level         Level
+	Color         bool
+	DryRun        bool
+	HideUnchanged bool
+}
+
 type Printer struct {
-	out     io.Writer
-	err     io.Writer
-	level   Level
-	dryRun  bool
-	color   bool
-	summary Summary
+	out           io.Writer
+	err           io.Writer
+	level         Level
+	dryRun        bool
+	hideUnchanged bool
+	color         bool
+	summary       Summary
+	bodyWritten   bool // any non-summary line was written
 }
 
-func New(out, errOut io.Writer, level Level, color, dryRun bool) *Printer {
-	return &Printer{out: out, err: errOut, level: level, dryRun: dryRun, color: color}
-}
-
-func (p *Printer) Group(name string) {
-	if p.level == LevelQuiet {
-		return
+func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
+	return &Printer{
+		out:           out,
+		err:           errOut,
+		level:         opts.Level,
+		dryRun:        opts.DryRun,
+		hideUnchanged: opts.HideUnchanged,
+		color:         opts.Color,
 	}
-	_, _ = fmt.Fprintln(p.out, p.styleHeader(name))
 }
 
 func (p *Printer) Item(sym Symbol, name, detail string) {
@@ -71,25 +83,28 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 	if p.level == LevelQuiet && sym != SymError {
 		return
 	}
+	if p.hideUnchanged && sym == SymUpToDate {
+		return
+	}
 	prefix := p.symbol(sym)
-	line := "  " + prefix + " " + name
+	line := prefix + " " + name
 	if detail != "" {
 		line += " " + p.styleDim(detail)
 	}
 	if p.dryRun && sym != SymUpToDate && sym != SymError {
 		line += " " + p.styleDim("(dry-run)")
 	}
-	_, _ = fmt.Fprintln(p.out, line)
+	p.writeBodyOut(line)
 }
 
-// Notice is used for missing-file messages like "∘ work: no Headfile,
+// Notice is used for missing-file messages like "⊘ work: no Headfile,
 // skipping" — informational, not an error, but counted as a skip.
 func (p *Printer) Notice(msg string) {
 	p.summary.Skipped++
 	if p.level == LevelQuiet {
 		return
 	}
-	_, _ = fmt.Fprintln(p.out, "  "+p.symbol(SymNotice)+" "+p.styleDim(msg))
+	p.writeBodyOut(p.symbol(SymNotice) + " " + p.styleDim(msg))
 }
 
 // Verbose is a no-op outside LevelVerbose; it indents raw brew output
@@ -98,8 +113,8 @@ func (p *Printer) Verbose(content string) {
 	if p.level != LevelVerbose || strings.TrimSpace(content) == "" {
 		return
 	}
-	for _, line := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
-		_, _ = fmt.Fprintln(p.out, "      "+p.styleDim(line))
+	for _, line := range outputLines(content) {
+		p.writeBodyOut(detailIndent + p.styleDim(line))
 	}
 }
 
@@ -109,18 +124,32 @@ func (p *Printer) Verbose(content string) {
 func (p *Printer) Error(name, msg, output string) {
 	p.summary.Errors++
 	prefix := p.symbol(SymError)
-	_, _ = fmt.Fprintln(p.err, "  "+prefix+" "+name+": "+msg)
+	p.writeBodyErr(prefix + " " + name + ": " + msg)
 	if strings.TrimSpace(output) == "" {
 		return
 	}
-	for _, line := range strings.Split(strings.TrimRight(output, "\n"), "\n") {
-		_, _ = fmt.Fprintln(p.err, "      "+line)
+	for _, line := range outputLines(output) {
+		p.writeBodyErr(detailIndent + line)
 	}
+}
+
+func outputLines(content string) []string {
+	return strings.Split(strings.TrimRight(content, "\n"), "\n")
+}
+
+func (p *Printer) writeBodyOut(line string) {
+	_, _ = fmt.Fprintln(p.out, line)
+	p.bodyWritten = true
+}
+
+func (p *Printer) writeBodyErr(line string) {
+	_, _ = fmt.Fprintln(p.err, line)
+	p.bodyWritten = true
 }
 
 // Footer is emitted even in quiet mode so scripts have something to grep.
 func (p *Printer) Footer() {
-	parts := []string{}
+	var parts []string
 	if p.summary.Added > 0 {
 		parts = append(parts, fmt.Sprintf("%d added", p.summary.Added))
 	}
@@ -139,7 +168,7 @@ func (p *Printer) Footer() {
 	if len(parts) == 0 {
 		parts = append(parts, "nothing to do")
 	}
-	if p.level != LevelQuiet {
+	if p.level != LevelQuiet && p.bodyWritten {
 		_, _ = fmt.Fprintln(p.out)
 	}
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))
@@ -149,40 +178,47 @@ func (p *Printer) RestartAppsNotice(names []string) {
 	if len(names) == 0 || p.level == LevelQuiet {
 		return
 	}
-	_, _ = fmt.Fprintln(p.out)
-	_, _ = fmt.Fprintln(p.out, p.styleWarn("⚠ Restart these apps to apply upgrades"))
-	for _, n := range names {
-		_, _ = fmt.Fprintln(p.out, "  "+n)
+	if p.bodyWritten {
+		_, _ = fmt.Fprintln(p.out)
+	}
+	p.writeBodyOut(p.styleWarn("⚠ Restart these apps to apply upgrades"))
+	for _, name := range names {
+		p.writeBodyOut("  " + name)
 	}
 }
 
 func (p *Printer) symbol(sym Symbol) string {
+	plain := symbolText(sym)
 	if !p.color {
-		switch sym {
-		case SymUpToDate:
-			return "✓"
-		case SymAdded:
-			return "+"
-		case SymUpgraded:
-			return "↑"
-		case SymError:
-			return "✗"
-		case SymNotice:
-			return "∘"
-		}
-		return "?"
+		return plain
 	}
 	switch sym {
 	case SymUpToDate:
-		return styleOK.Render("✓")
+		return styleOK.Render(plain)
 	case SymAdded:
-		return styleAdded.Render("+")
+		return styleAdded.Render(plain)
 	case SymUpgraded:
-		return styleUpgraded.Render("↑")
+		return styleUpgraded.Render(plain)
 	case SymError:
-		return styleErr.Render("✗")
+		return styleErr.Render(plain)
 	case SymNotice:
-		return styleDim.Render("∘")
+		return styleDim.Render(plain)
+	}
+	return plain
+}
+
+func symbolText(sym Symbol) string {
+	switch sym {
+	case SymUpToDate:
+		return "✓"
+	case SymAdded:
+		return "+"
+	case SymUpgraded:
+		return "↑"
+	case SymError:
+		return "✗"
+	case SymNotice:
+		return "⊘"
 	}
 	return "?"
 }
@@ -194,15 +230,7 @@ var (
 	styleErr      = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	styleDim      = lipgloss.NewStyle().Faint(true)
 	styleWarn     = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	styleHeaderHl = lipgloss.NewStyle().Bold(true)
 )
-
-func (p *Printer) styleHeader(s string) string {
-	if !p.color {
-		return s
-	}
-	return styleHeaderHl.Render(s)
-}
 
 func (p *Printer) styleDim(s string) string {
 	if !p.color {

@@ -64,6 +64,10 @@ Each apply command accepts an optional positional arg to scope the
 operation to a single item, looked up by name (full or short, after
 the last `/`) across the active profiles.
 
+Apply-command flags:
+  --hide-unchanged  suppress per-item lines for already satisfied
+                    entries; summaries still count them
+
 Global flags:
   --config PATH        explicit path to brewkit.toml
   --profile NAME       repeatable; replaces config/env
@@ -81,7 +85,7 @@ summary. Symbols:
   +  added (newly installed)
   ↑  upgraded (with old → new where available)
   ✓  already up to date
-  ∘  notice (e.g. missing profile file, skipped)
+  ⊘  skipped notice (e.g. missing profile file)
   ✗  error
 
 On any non-zero brew exit the captured stdout/stderr is printed in
@@ -165,18 +169,23 @@ final summary count.
 HEAD formula handling
 ---------------------
 
-`brewkit head` uses the same SHA-idempotency strategy as the
-underlying brew-head-sync.sh:
+`brewkit head` uses a SHA-idempotency strategy for valid HEAD
+entries:
 
-  1. If the formula is not installed, install with `brew install
-     --head --formula <name>` (HOMEBREW_NO_GITHUB_API=1).
-  2. If installed but not as HEAD (the linked keg version is not
-     `HEAD-...`), reinstall as HEAD.
-  3. If installed as HEAD, fetch the latest available HEAD short
+  1. If the formula is installed but not as HEAD (the linked keg
+     version is not `HEAD-...`), report an error and do not
+     auto-convert it.
+  2. If the formula has no HEAD source, report an error and do not
+     install or reinstall it.
+  3. If the formula is not installed and has a HEAD source, install
+     with `brew install --head --formula <name>`
+     (HOMEBREW_NO_GITHUB_API=1).
+  4. If installed as HEAD, fetch the latest available HEAD short
      SHA from the formula's HEAD source repository and compare
      against the installed SHA. Reinstall only when they differ.
 
-This avoids slow rebuilds when the upstream repo has not moved.
+This avoids slow rebuilds when the upstream repo has not moved and
+keeps invalid Headfile entries actionable.
 
 
 Cask handling
