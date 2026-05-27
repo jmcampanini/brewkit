@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Go modules - individual PRs for careful review
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions - grouped to reduce noise
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    groups:
+      actions:
+        patterns:
+          - "*"
