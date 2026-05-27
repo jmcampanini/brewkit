@@ -16,7 +16,7 @@ type progressBrewer struct {
 	printer *ui.Printer
 }
 
-func newProgressBrewer(next brew.Brewer, printer *ui.Printer) brew.Brewer {
+func newProgressBrewer(next brew.Brewer, printer *ui.Printer) *progressBrewer {
 	return &progressBrewer{next: next, printer: printer}
 }
 
@@ -30,9 +30,9 @@ func (b *progressBrewer) withSpinner(message string, fn func() error) error {
 func (b *progressBrewer) withResult(message string, fn func() (brew.Result, error)) (brew.Result, error) {
 	var res brew.Result
 	err := b.withSpinner(message, func() error {
-		var err error
-		res, err = fn()
-		return err
+		var opErr error
+		res, opErr = fn()
+		return opErr
 	})
 	return res, err
 }
@@ -40,9 +40,9 @@ func (b *progressBrewer) withResult(message string, fn func() (brew.Result, erro
 func (b *progressBrewer) State(ctx context.Context) (*brew.State, error) {
 	var state *brew.State
 	err := b.withSpinner("Checking Homebrew state…", func() error {
-		var err error
-		state, err = b.next.State(ctx)
-		return err
+		var opErr error
+		state, opErr = b.next.State(ctx)
+		return opErr
 	})
 	return state, err
 }
@@ -82,9 +82,9 @@ func (b *progressBrewer) HeadInstalledSHA(ctx context.Context, name string) (str
 	var installedAsHead bool
 	var installed bool
 	err := b.withSpinner(fmt.Sprintf("Checking HEAD %s…", name), func() error {
-		var err error
-		sha, installedAsHead, installed, err = b.next.HeadInstalledSHA(ctx, name)
-		return err
+		var opErr error
+		sha, installedAsHead, installed, opErr = b.next.HeadInstalledSHA(ctx, name)
+		return opErr
 	})
 	return sha, installedAsHead, installed, err
 }
@@ -93,9 +93,9 @@ func (b *progressBrewer) HeadLatestSHA(ctx context.Context, name string) (string
 	var sha string
 	var hasHead bool
 	err := b.withSpinner(fmt.Sprintf("Checking latest HEAD %s…", name), func() error {
-		var err error
-		sha, hasHead, err = b.next.HeadLatestSHA(ctx, name)
-		return err
+		var opErr error
+		sha, hasHead, opErr = b.next.HeadLatestSHA(ctx, name)
+		return opErr
 	})
 	return sha, hasHead, err
 }
