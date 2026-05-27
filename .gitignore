@@ -6,4 +6,5 @@
 
 # Local build artifacts
 /brewkit
+/build/
 /dist/
