@@ -107,10 +107,10 @@ func runApply(ctx context.Context, t profile.Kind, args []string) error {
 			failures = append(failures, err)
 		}
 		for _, e := range f.Entries() {
+			if filter != "" && !entryMatches(e, filter) {
+				continue
+			}
 			if filter != "" {
-				if !entryMatches(e, filter) {
-					continue
-				}
 				matched = true
 			}
 			if err := rc.apply(t, e); err != nil {

@@ -204,10 +204,7 @@ func (p *Printer) writeBodyErr(line string) {
 }
 
 func (p *Printer) writeSpinnerFrame(frame, message string) {
-	line := frame + " " + message
-	if p.color {
-		line = styleDim.Render(line)
-	}
+	line := p.styleDim(frame + " " + message)
 	_, _ = fmt.Fprintf(p.err, "\r\033[2K%s", line)
 }
 
