@@ -83,7 +83,9 @@ Global flags:
   --profiles LIST        comma-separated profiles; replaces file/env raw profiles
   --dry-run              compute changes without applying
   -v, --verbose          stream raw brew output for every operation
-  -q, --quiet            suppress per-item stream; show errors + summary
+                         (cannot be used with --quiet)
+  -q, --quiet            errors-only output for operational commands
+                         (cannot be used with --verbose)
 
 
 Output
@@ -100,6 +102,15 @@ summary. Symbols:
 
 On any non-zero brew exit the captured stdout/stderr is printed in
 full regardless of verbosity.
+
+With -q/--quiet, operational commands (tap, brew, head, cask, lint)
+emit only errors. Successful quiet operational runs print nothing: no
+per-item success lines, skipped-file notices, restart notices, or final
+summary. Lint violations are actionable errors, so `brewkit -q lint`
+still prints individual violations and exits non-zero; clean quiet lint
+prints nothing. `brewkit -q config` and `brewkit -q docs` still print
+their requested payloads. --quiet and --verbose cannot be used
+together.
 
 
 File formats
@@ -172,8 +183,8 @@ Each rule has a stable ID for reference in error messages.
                           as a valid entry for its file type.
 
 `brewkit lint` exits non-zero when any violations are found.
-`-v` includes the offending line content; `-q` prints only the
-final summary count.
+`-v` includes the offending line content. `-q` prints individual
+violations only, and prints nothing when there are no violations.
 
 
 HEAD formula handling

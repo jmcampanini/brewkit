@@ -1,5 +1,6 @@
 // Package ui implements the brewkit terminal output: a streaming printer
-// that emits per-item changes during a command, plus a final summary line.
+// that emits per-item changes during a command, plus a final summary line
+// outside quiet mode.
 package ui
 
 import (
@@ -237,8 +238,14 @@ func (p *Printer) clearSpinner() {
 	_, _ = fmt.Fprint(p.err, spinnerClearSequence)
 }
 
-// Footer is emitted even in quiet mode so scripts have something to grep.
+// Footer emits the final summary outside quiet mode. In quiet mode,
+// operational commands communicate success or failure through their exit code
+// and any error output already emitted by Error.
 func (p *Printer) Footer() {
+	if p.level == LevelQuiet {
+		return
+	}
+
 	var parts []string
 	if p.summary.Added > 0 {
 		parts = append(parts, fmt.Sprintf("%d added", p.summary.Added))
@@ -258,7 +265,7 @@ func (p *Printer) Footer() {
 	if len(parts) == 0 {
 		parts = append(parts, "nothing to do")
 	}
-	if p.level != LevelQuiet && p.bodyWritten {
+	if p.bodyWritten {
 		_, _ = fmt.Fprintln(p.out)
 	}
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))

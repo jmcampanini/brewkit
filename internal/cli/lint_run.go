@@ -69,20 +69,20 @@ func runLint(_ context.Context) error {
 		return nil
 	}
 
-	if !flags.quiet {
-		for _, v := range violations {
-			if _, err := fmt.Fprintf(w, "%s:%d: [%s] %s\n", v.Path, v.Line, v.RuleID, v.Message); err != nil {
+	for _, v := range violations {
+		if _, err := fmt.Fprintf(w, "%s:%d: [%s] %s\n", v.Path, v.Line, v.RuleID, v.Message); err != nil {
+			return err
+		}
+		if flags.verbose && !flags.quiet && v.Raw != "" {
+			if _, err := fmt.Fprintf(w, "      %s\n", v.Raw); err != nil {
 				return err
-			}
-			if flags.verbose && v.Raw != "" {
-				if _, err := fmt.Fprintf(w, "      %s\n", v.Raw); err != nil {
-					return err
-				}
 			}
 		}
 	}
-	if _, err := fmt.Fprintf(w, "Summary: %d violation(s)\n", len(violations)); err != nil {
-		return err
+	if !flags.quiet {
+		if _, err := fmt.Fprintf(w, "Summary: %d violation(s)\n", len(violations)); err != nil {
+			return err
+		}
 	}
 	return fmt.Errorf("lint failed: %d violation(s)", len(violations))
 }

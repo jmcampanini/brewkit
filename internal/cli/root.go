@@ -22,20 +22,25 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "brewkit",
 		Short:         "Multi-profile Homebrew manager",
-		Long:          "brewkit manages Homebrew taps, formulas, HEAD formulas, and casks across multiple layered profiles defined in profile files.",
+		Long:          "brewkit manages Homebrew taps, formulas, HEAD formulas, and casks across multiple layered profiles defined in profile files.\n\nOutput modes --quiet and --verbose are mutually exclusive.",
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
 	}
 
-	root.PersistentFlags().StringVar(&flags.configPath, "config", "", "path to brewkit.toml (defaults to ./brewkit.toml if present)")
-	if err := config.RegisterFlags(root.PersistentFlags()); err != nil {
+	persistentFlags := root.PersistentFlags()
+	persistentFlags.StringVar(&flags.configPath, "config", "", "path to brewkit.toml (defaults to ./brewkit.toml if present)")
+	if err := config.RegisterFlags(persistentFlags); err != nil {
 		panic(err)
 	}
-	configFlagSet = root.PersistentFlags()
-	root.PersistentFlags().BoolVar(&flags.dryRun, "dry-run", false, "compute changes without applying them")
-	root.PersistentFlags().BoolVarP(&flags.verbose, "verbose", "v", false, "stream raw brew output for every operation")
-	root.PersistentFlags().BoolVarP(&flags.quiet, "quiet", "q", false, "suppress per-item output; show only errors and final summary")
+	configFlagSet = persistentFlags
+	persistentFlags.BoolVar(&flags.dryRun, "dry-run", false, "compute changes without applying them")
+	persistentFlags.BoolVarP(&flags.verbose, "verbose", "v", false, "stream raw brew output for every operation (mutually exclusive with --quiet)")
+	persistentFlags.BoolVarP(&flags.quiet, "quiet", "q", false, "errors-only output for operational commands (mutually exclusive with --verbose)")
+	root.MarkFlagsMutuallyExclusive("quiet", "verbose")
 
 	root.AddCommand(newTapCmd())
 	root.AddCommand(newBrewCmd())
