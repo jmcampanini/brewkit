@@ -2,14 +2,44 @@ package ui
 
 import (
 	"bytes"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func newTestPrinter(level Level) (*Printer, *bytes.Buffer, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
 	return New(out, errOut, PrinterOptions{Level: level}), out, errOut
+}
+
+type signalWriter struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	wrote chan struct{}
+	once  sync.Once
+}
+
+func newSignalWriter() *signalWriter {
+	return &signalWriter{wrote: make(chan struct{})}
+}
+
+func (w *signalWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	n, err := w.buf.Write(p)
+	w.mu.Unlock()
+	if bytes.Contains(p, []byte("Installing ripgrep…")) {
+		w.once.Do(func() { close(w.wrote) })
+	}
+	return n, err
+}
+
+func (w *signalWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
 }
 
 func TestPrinter_NormalStream(t *testing.T) {
@@ -96,6 +126,52 @@ func TestPrinter_NormalSkipsRawOutput(t *testing.T) {
 
 	if strings.Contains(out.String(), "Downloading") {
 		t.Errorf("normal level should not print verbose output:\n%s", out.String())
+	}
+}
+
+func TestPrinter_SpinnerDisabledIsSilentAndPreservesError(t *testing.T) {
+	p, out, errOut := newTestPrinter(LevelNormal)
+	wantErr := errors.New("boom")
+	called := false
+
+	err := p.WithSpinner("Checking Homebrew state…", func() error {
+		called = true
+		return wantErr
+	})
+
+	if !called {
+		t.Fatal("spinner callback was not called")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected spinner to preserve callback error, got %v", err)
+	}
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("disabled spinner should be silent; stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
+func TestPrinter_SpinnerActiveWritesOnlyTransientStderr(t *testing.T) {
+	out := &bytes.Buffer{}
+	errOut := newSignalWriter()
+	p := New(out, errOut, PrinterOptions{Level: LevelNormal, Spinner: true})
+
+	if err := p.WithSpinner("Installing ripgrep…", func() error {
+		select {
+		case <-errOut.wrote:
+			return nil
+		case <-time.After(time.Second):
+			return errors.New("spinner did not render")
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if out.Len() != 0 {
+		t.Fatalf("spinner should not write durable stdout output: %q", out.String())
+	}
+	got := errOut.String()
+	if !strings.Contains(got, "Installing ripgrep…") || !strings.HasSuffix(got, "\r\x1b[2K") {
+		t.Fatalf("spinner should render then clear stderr; got %q", got)
 	}
 }
 

@@ -38,11 +38,14 @@ func newPrinter() *ui.Printer {
 	case flags.quiet:
 		level = ui.LevelQuiet
 	}
+	stdoutTTY := isTerminal(os.Stdout)
+	stderrTTY := isTerminal(os.Stderr)
 	return ui.New(os.Stdout, os.Stderr, ui.PrinterOptions{
 		Level:         level,
-		Color:         isTerminal(os.Stdout),
+		Color:         stdoutTTY,
 		DryRun:        flags.dryRun,
 		HideUnchanged: flags.hideUnchanged,
+		Spinner:       level == ui.LevelNormal && stdoutTTY && stderrTTY,
 	})
 }
 
@@ -53,10 +56,11 @@ func runApply(ctx context.Context, t profile.Kind, args []string) error {
 		return err
 	}
 
+	printer := newPrinter()
 	rc := &runContext{
 		ctx:      ctx,
-		brewer:   brewerFactory(),
-		printer:  newPrinter(),
+		brewer:   newProgressBrewer(brewerFactory(), printer),
+		printer:  printer,
 		dryRun:   flags.dryRun,
 		failFast: cfg.FailFast,
 	}

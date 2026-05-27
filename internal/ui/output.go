@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -44,6 +45,7 @@ type PrinterOptions struct {
 	Color         bool
 	DryRun        bool
 	HideUnchanged bool
+	Spinner       bool
 }
 
 type Printer struct {
@@ -53,6 +55,7 @@ type Printer struct {
 	dryRun        bool
 	hideUnchanged bool
 	color         bool
+	spinner       bool
 	summary       Summary
 	bodyWritten   bool // any non-summary line was written
 }
@@ -65,6 +68,7 @@ func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 		dryRun:        opts.DryRun,
 		hideUnchanged: opts.HideUnchanged,
 		color:         opts.Color,
+		spinner:       opts.Spinner,
 	}
 }
 
@@ -133,6 +137,53 @@ func (p *Printer) Error(name, msg, output string) {
 	}
 }
 
+// WithSpinner runs fn while rendering a transient progress line to stderr.
+// The spinner is intentionally best-effort: it is disabled by default and
+// never contributes to bodyWritten, summaries, or durable stdout output.
+func (p *Printer) WithSpinner(message string, fn func() error) error {
+	if !p.spinner || p.level != LevelNormal || strings.TrimSpace(message) == "" {
+		return fn()
+	}
+
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		wrote := false
+		frame := 0
+		for {
+			select {
+			case <-done:
+				if wrote {
+					p.clearSpinner()
+				}
+				return
+			default:
+			}
+
+			p.writeSpinnerFrame(spinnerFrames[frame%len(spinnerFrames)], message)
+			wrote = true
+			frame++
+
+			select {
+			case <-done:
+				p.clearSpinner()
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	defer func() {
+		close(done)
+		<-stopped
+	}()
+	return fn()
+}
+
 func outputLines(content string) []string {
 	return strings.Split(strings.TrimRight(content, "\n"), "\n")
 }
@@ -145,6 +196,18 @@ func (p *Printer) writeBodyOut(line string) {
 func (p *Printer) writeBodyErr(line string) {
 	_, _ = fmt.Fprintln(p.err, line)
 	p.bodyWritten = true
+}
+
+func (p *Printer) writeSpinnerFrame(frame, message string) {
+	line := frame + " " + message
+	if p.color {
+		line = styleDim.Render(line)
+	}
+	_, _ = fmt.Fprintf(p.err, "\r\033[2K%s", line)
+}
+
+func (p *Printer) clearSpinner() {
+	_, _ = fmt.Fprint(p.err, "\r\033[2K")
 }
 
 // Footer is emitted even in quiet mode so scripts have something to grep.
@@ -222,6 +285,8 @@ func symbolText(sym Symbol) string {
 	}
 	return "?"
 }
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 var (
 	styleOK       = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
