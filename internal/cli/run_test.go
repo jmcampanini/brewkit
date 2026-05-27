@@ -126,8 +126,10 @@ func TestRootRejectsQuietAndVerboseTogether(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected quiet/verbose mutual exclusion error")
 	}
-	if !strings.Contains(err.Error(), "--quiet and --verbose cannot be used together") {
-		t.Fatalf("unexpected error: %v", err)
+	for _, want := range []string{"quiet", "verbose", "none of the others can be"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected native mutual exclusion error to contain %q, got: %v", want, err)
+		}
 	}
 }
 

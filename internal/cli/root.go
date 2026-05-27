@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"errors"
-
 	"github.com/jmcampanini/brewkit/internal/config"
 	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/spf13/cobra"
@@ -24,13 +22,10 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "brewkit",
 		Short:         "Multi-profile Homebrew manager",
-		Long:          "brewkit manages Homebrew taps, formulas, HEAD formulas, and casks across multiple layered profiles defined in profile files.",
+		Long:          "brewkit manages Homebrew taps, formulas, HEAD formulas, and casks across multiple layered profiles defined in profile files.\n\nOutput modes --quiet and --verbose are mutually exclusive.",
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
-			return validateGlobalFlags()
-		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
@@ -44,6 +39,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolVar(&flags.dryRun, "dry-run", false, "compute changes without applying them")
 	root.PersistentFlags().BoolVarP(&flags.verbose, "verbose", "v", false, "stream raw brew output for every operation (mutually exclusive with --quiet)")
 	root.PersistentFlags().BoolVarP(&flags.quiet, "quiet", "q", false, "errors-only output for operational commands (mutually exclusive with --verbose)")
+	root.MarkFlagsMutuallyExclusive("quiet", "verbose")
 
 	root.AddCommand(newTapCmd())
 	root.AddCommand(newBrewCmd())
@@ -54,13 +50,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDocsCmd())
 
 	return root
-}
-
-func validateGlobalFlags() error {
-	if flags.quiet && flags.verbose {
-		return errors.New("--quiet and --verbose cannot be used together")
-	}
-	return nil
 }
 
 func newApplyCmd(use, short string, kind profile.Kind) *cobra.Command {
