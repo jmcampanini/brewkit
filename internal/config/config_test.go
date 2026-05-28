@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	configloader "github.com/jmcampanini/go-config-loader"
+	"github.com/jmcampanini/go-config-loader/configloader"
 	"github.com/jmcampanini/go-config-loader/pflagloader"
 	"github.com/spf13/pflag"
 )

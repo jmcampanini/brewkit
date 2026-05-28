@@ -15,6 +15,15 @@ To update a HEAD install:
 brew upgrade --fetch-HEAD brewkit
 ```
 
+For a source/dev build:
+
+```sh
+git clone https://github.com/jmcampanini/brewkit
+cd brewkit
+make build
+./build/brewkit --version
+```
+
 ## Quick start
 
 Create `brewkit.toml` and one or more profile files:

@@ -8,6 +8,7 @@ class Brewkit < Formula
   def install
     ldflags = "-s -w -X github.com/jmcampanini/brewkit/internal/cli.Version=HEAD-#{Utils.git_short_head}"
     system "go", "build", *std_go_args(output: bin/"brewkit", ldflags: ldflags), "./cmd/brewkit"
+    generate_completions_from_executable(bin/"brewkit", "completion")
   end
 
   test do
