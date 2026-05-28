@@ -1,10 +1,15 @@
-# Claude / Codex tooling state
+# Agent scratch paths
 .claude/
 .claude-plans/
 .claude-sandbox/
-.codex-review/
+.codex-*
 
 # Local build artifacts
 /brewkit
 /build/
 /dist/
+
+# Coverage output
+/coverage.out
+/coverage.html
+*.coverprofile
