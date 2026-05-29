@@ -223,7 +223,9 @@ func (p *Printer) writeBodyErr(line string) {
 }
 
 func (p *Printer) writeSpinnerFrame(frame, message string) {
-	line := p.styleDim(p.truncateSpinnerLine(p.outputPrefix + frame + " " + message))
+	line := p.outputPrefix + frame + " " + message
+	line = p.truncateSpinnerLine(line)
+	line = p.styleDim(line)
 	_, _ = fmt.Fprintf(p.spinnerErr, "%s%s", spinnerClearSequence, line)
 }
 

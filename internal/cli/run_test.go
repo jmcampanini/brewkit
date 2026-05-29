@@ -116,6 +116,43 @@ func TestRootProfilesFlagRegisteredAndSingularProfileRemoved(t *testing.T) {
 	}
 }
 
+func TestOutputPrefixDoesNotPrefixHelpOrVersion(t *testing.T) {
+	const outputPrefix = "prefix: "
+
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "help", args: []string{"--output-prefix", outputPrefix, "--help"}},
+		{name: "version", args: []string{"--output-prefix", outputPrefix, "--version"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			defer resetFlags()
+
+			root := newRootCmd()
+			var out, errOut bytes.Buffer
+			root.SetArgs(tt.args)
+			root.SetOut(&out)
+			root.SetErr(&errOut)
+
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			gotOut := out.String()
+			if gotOut == "" {
+				t.Fatal("expected command output")
+			}
+			if strings.Contains(gotOut, outputPrefix) {
+				t.Fatalf("help/version output should not be prefixed; got %q", gotOut)
+			}
+			if errOut.Len() != 0 {
+				t.Fatalf("expected no stderr output, got %q", errOut.String())
+			}
+		})
+	}
+}
+
 func TestPrintError_OutputPrefix(t *testing.T) {
 	resetFlags()
 	defer resetFlags()

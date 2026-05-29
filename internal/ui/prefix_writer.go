@@ -14,14 +14,14 @@ func NewLinePrefixWriter(w io.Writer, prefix string) io.Writer {
 		return w
 	}
 	return &linePrefixWriter{
-		w:           w,
+		dst:         w,
 		prefix:      []byte(prefix),
 		atLineStart: true,
 	}
 }
 
 type linePrefixWriter struct {
-	w           io.Writer
+	dst         io.Writer
 	prefix      []byte
 	atLineStart bool
 }
@@ -30,7 +30,7 @@ func (w *linePrefixWriter) Write(p []byte) (int, error) {
 	written := 0
 	for len(p) > 0 {
 		if w.atLineStart {
-			if _, err := w.w.Write(w.prefix); err != nil {
+			if _, err := w.dst.Write(w.prefix); err != nil {
 				return written, err
 			}
 			w.atLineStart = false
@@ -38,12 +38,12 @@ func (w *linePrefixWriter) Write(p []byte) (int, error) {
 
 		newline := bytes.IndexByte(p, '\n')
 		if newline < 0 {
-			n, err := w.w.Write(p)
+			n, err := w.dst.Write(p)
 			written += n
 			return written, err
 		}
 
-		n, err := w.w.Write(p[:newline+1])
+		n, err := w.dst.Write(p[:newline+1])
 		written += n
 		if err != nil {
 			return written, err
