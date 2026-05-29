@@ -82,6 +82,8 @@ Global flags:
   --config PATH          explicit path to brewkit.toml
   --profiles LIST        comma-separated profiles; replaces file/env raw profiles
   --dry-run              compute changes without applying
+  --output-prefix TEXT   prefix brewkit command output lines
+                         (excludes help/version)
   -v, --verbose          stream raw brew output for every operation
                          (cannot be used with --quiet)
   -q, --quiet            errors-only output for operational commands
@@ -102,6 +104,10 @@ summary. Symbols:
 
 On any non-zero brew exit the captured stdout/stderr is printed in
 full regardless of verbosity.
+
+Use --output-prefix TEXT to prefix output emitted by brewkit commands,
+including durable command output, errors, and transient progress frames.
+Help and version output are intentionally not prefixed.
 
 With -q/--quiet, operational commands (tap, brew, head, cask, lint)
 emit only errors. Successful quiet operational runs print nothing: no

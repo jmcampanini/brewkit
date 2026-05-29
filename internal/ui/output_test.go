@@ -74,6 +74,27 @@ func TestPrinter_HideUnchangedSuppressesOnlyUpToDate(t *testing.T) {
 	}
 }
 
+func TestPrinter_OutputPrefixPrefixesDurableLines(t *testing.T) {
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	p := New(out, errOut, PrinterOptions{Level: LevelNormal, OutputPrefix: "  "})
+	p.Item(SymAdded, "ripgrep", "")
+	p.Error("git", "install failed", "brew error")
+	p.Footer()
+
+	wantOut := "  + ripgrep\n" +
+		"  \n" +
+		"  Summary: 1 added, 1 failed\n"
+	if got := out.String(); got != wantOut {
+		t.Errorf("unexpected prefixed stdout:\nwant: %q\ngot:  %q", wantOut, got)
+	}
+	wantErr := "  ✗ git: install failed\n" +
+		"      brew error\n"
+	if got := errOut.String(); got != wantErr {
+		t.Errorf("unexpected prefixed stderr:\nwant: %q\ngot:  %q", wantErr, got)
+	}
+}
+
 func TestPrinter_QuietSuppressesStreamAndFooter(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelQuiet)
 	p.Item(SymUpToDate, "git", "(2.45.0)")
@@ -176,6 +197,32 @@ func TestPrinter_SpinnerActiveWritesOnlyTransientStderr(t *testing.T) {
 	}
 }
 
+func TestPrinter_OutputPrefixPrefixesSpinner(t *testing.T) {
+	out := &bytes.Buffer{}
+	errOut := newSignalWriter()
+	p := New(out, errOut, PrinterOptions{
+		Level:        LevelNormal,
+		OutputPrefix: "  ",
+		Spinner:      true,
+	})
+
+	if err := p.WithSpinner("Installing ripgrep…", func() error {
+		select {
+		case <-errOut.wrote:
+			return nil
+		case <-time.After(time.Second):
+			return errors.New("spinner did not render")
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := errOut.String()
+	if !strings.Contains(got, "  ⠋ Installing ripgrep…") {
+		t.Fatalf("spinner should include output prefix; got %q", got)
+	}
+}
+
 func TestPrinter_SpinnerTruncatesToTerminalWidth(t *testing.T) {
 	p := New(&bytes.Buffer{}, &bytes.Buffer{}, PrinterOptions{
 		Level:        LevelNormal,
@@ -233,5 +280,21 @@ func TestPrinter_FooterNothingToDo(t *testing.T) {
 	want := "Summary: nothing to do\n"
 	if out.String() != want {
 		t.Errorf("unexpected footer output:\nwant: %q\ngot:  %q", want, out.String())
+	}
+}
+
+func TestLinePrefixWriterPrefixesEachLine(t *testing.T) {
+	out := &bytes.Buffer{}
+	w := NewLinePrefixWriter(out, "  ")
+	if _, err := w.Write([]byte("a\nb\n\nc")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("d\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "  a\n  b\n  \n  cd\n"
+	if got := out.String(); got != want {
+		t.Errorf("unexpected prefixed output:\nwant: %q\ngot:  %q", want, got)
 	}
 }
