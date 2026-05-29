@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -31,7 +30,7 @@ func runConfig(_ context.Context) error {
 		return err
 	}
 
-	w := os.Stdout
+	w := stdoutWriter()
 	if _, err := w.Write(out); err != nil {
 		return err
 	}

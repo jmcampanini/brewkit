@@ -53,6 +53,7 @@ func newPrinter() *ui.Printer {
 		Color:         stdoutTTY,
 		DryRun:        flags.dryRun,
 		HideUnchanged: flags.hideUnchanged,
+		OutputPrefix:  flags.outputPrefix,
 		Spinner:       spinner,
 		SpinnerWidth:  spinnerWidth,
 	})

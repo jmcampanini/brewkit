@@ -108,8 +108,26 @@ func TestRootProfilesFlagRegisteredAndSingularProfileRemoved(t *testing.T) {
 	if root.PersistentFlags().Lookup("profiles") == nil {
 		t.Fatal("root should register --profiles")
 	}
+	if root.PersistentFlags().Lookup("output-prefix") == nil {
+		t.Fatal("root should register --output-prefix")
+	}
 	if root.PersistentFlags().Lookup("profile") != nil {
 		t.Fatal("root should not preserve old --profile flag")
+	}
+}
+
+func TestPrintError_OutputPrefix(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	flags.outputPrefix = "  "
+	_, errOut := captureOutput(t, func() {
+		PrintError(errors.New("first\nsecond"))
+	})
+
+	want := "  brewkit: first\n  second\n"
+	if errOut != want {
+		t.Errorf("unexpected prefixed top-level error:\nwant: %q\ngot:  %q", want, errOut)
 	}
 }
 
@@ -242,6 +260,32 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 	}
 	if len(fake.Calls) != 0 {
 		t.Errorf("dry-run should not call brewer; got %d calls", len(fake.Calls))
+	}
+}
+
+func TestRunApply_Brew_OutputPrefix(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": `brew "ripgrep"  # search` + "\n",
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.dryRun = true
+	flags.outputPrefix = "  "
+
+	fake := brew.NewFake()
+	useBrewer(t, fake)
+
+	out := captureStdout(t, func() {
+		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+			t.Errorf("runApply err: %v", err)
+		}
+	})
+
+	want := "  + ripgrep (dry-run)\n  \n  Summary: 1 added\n"
+	if out != want {
+		t.Errorf("unexpected prefixed dry-run output:\nwant: %q\ngot:  %q", want, out)
 	}
 }
 
@@ -1551,6 +1595,30 @@ func TestRunLint_Clean(t *testing.T) {
 	})
 	if !strings.Contains(out, "no violations") {
 		t.Errorf("expected 'no violations':\n%s", out)
+	}
+}
+
+func TestRunLint_OutputPrefix(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": strings.Join([]string{
+			`brew "abc"  # a`,
+			`brew "def"  # d`,
+			``,
+		}, "\n"),
+	})
+	flags.configPath = filepath.Join(dir, "brewkit.toml")
+	flags.outputPrefix = "  "
+
+	out := captureStdout(t, func() {
+		if err := runLint(context.Background()); err != nil {
+			t.Errorf("runLint err: %v", err)
+		}
+	})
+	if out != "  no violations\n" {
+		t.Errorf("unexpected prefixed lint output: %q", out)
 	}
 }
 
