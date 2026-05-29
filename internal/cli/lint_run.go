@@ -17,13 +17,7 @@ func profilesFlagChanged() bool {
 	if configFlagSet == nil {
 		return false
 	}
-	for _, name := range []string{"profiles", "profile"} {
-		flag := configFlagSet.Lookup(name)
-		if flag != nil && flag.Changed {
-			return true
-		}
-	}
-	return false
+	return configFlagSet.Changed("profiles") || configFlagSet.Changed("profile")
 }
 
 func runLint(_ context.Context) error {
