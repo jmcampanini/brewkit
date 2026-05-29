@@ -63,7 +63,7 @@ There is no implicit `common` profile; set `profiles` in `brewkit.toml`, use `BR
 
 Use `--hide-unchanged` with `tap`, `brew`, `head`, or `cask` to hide already-satisfied per-item lines while keeping the final summary accurate.
 
-Use `--output-prefix "  "` when nesting brewkit under a task runner and you want indented output without piping stdout/stderr, which keeps spinners and colors available.
+Use `--output-prefix TEXT` to prefix output emitted by brewkit commands, including durable command output, errors, and transient progress frames. Help and version output are intentionally not prefixed.
 
 Use `-q, --quiet` for errors-only operational runs; successful quiet `tap`, `brew`, `head`, `cask`, and `lint` commands are silent, while `lint -q` still prints violations. `--quiet` and `--verbose` cannot be combined.
 

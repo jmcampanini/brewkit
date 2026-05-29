@@ -41,7 +41,7 @@ func newRootCmd() *cobra.Command {
 	persistentFlags.BoolVar(&flags.dryRun, "dry-run", false, "compute changes without applying them")
 	persistentFlags.BoolVarP(&flags.verbose, "verbose", "v", false, "stream raw brew output for every operation (mutually exclusive with --quiet)")
 	persistentFlags.BoolVarP(&flags.quiet, "quiet", "q", false, "errors-only output for operational commands (mutually exclusive with --verbose)")
-	persistentFlags.StringVar(&flags.outputPrefix, "output-prefix", "", "prefix each brewkit output line without piping stdout/stderr")
+	persistentFlags.StringVar(&flags.outputPrefix, "output-prefix", "", "prefix brewkit command output lines (excludes help/version)")
 	root.MarkFlagsMutuallyExclusive("quiet", "verbose")
 
 	root.AddCommand(newTapCmd())
