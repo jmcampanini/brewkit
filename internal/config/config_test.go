@@ -306,6 +306,27 @@ func TestLoad_ProfilesFlagOverridesFileAndEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_ProfileFlagOverridesFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "brewkit.toml")
+	if err := writeFile(t, path, []byte(`profiles = ["file"]`)); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BREWKIT_PROFILES", "env")
+	flags := newTestFlagSet(t, "--profile", "work", "--profile", "personal")
+
+	cfg, report, err := LoadWithReport(path, flags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cfg.Profiles, []string{"work", "personal"}) {
+		t.Errorf("Profiles = %v, want singular profile flags [work personal]", cfg.Profiles)
+	}
+	if report.Updates["profiles"] != pflagloader.SourcePFlag {
+		t.Errorf("profiles source = %q, want pflag", report.Updates["profiles"])
+	}
+}
+
 func newTestFlagSet(t *testing.T, args ...string) *pflag.FlagSet {
 	t.Helper()
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)

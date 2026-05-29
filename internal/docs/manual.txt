@@ -41,10 +41,11 @@ BREWKIT_PROFILES overrides the raw `profiles` value:
 
   BREWKIT_PROFILES=work,personal brewkit brew
 
-Profile flags use a comma-separated list and override file/env raw
-profiles:
+Profile flags override file/env raw profiles. Use --profiles for a
+comma-separated list, or repeat --profile to add one profile per flag:
 
   brewkit --profiles work,personal brew
+  brewkit --profile work --profile personal brew
 
 Effective profiles are derived from raw `profiles`, appended values
 from the variable named by `env_profiles`, de-duplication preserving
@@ -81,6 +82,7 @@ Apply-command flags:
 Global flags:
   --config PATH          explicit path to brewkit.toml
   --profiles LIST        comma-separated profiles; replaces file/env raw profiles
+  --profile NAME         add one profile; may be repeated; replaces file/env raw profiles
   --dry-run              compute changes without applying
   -v, --verbose          stream raw brew output for every operation
                          (cannot be used with --quiet)

@@ -17,8 +17,13 @@ func profilesFlagChanged() bool {
 	if configFlagSet == nil {
 		return false
 	}
-	flag := configFlagSet.Lookup("profiles")
-	return flag != nil && flag.Changed
+	for _, name := range []string{"profiles", "profile"} {
+		flag := configFlagSet.Lookup(name)
+		if flag != nil && flag.Changed {
+			return true
+		}
+	}
+	return false
 }
 
 func runLint(_ context.Context) error {
@@ -27,8 +32,8 @@ func runLint(_ context.Context) error {
 		return err
 	}
 
-	// --profiles narrows the scan; otherwise lint scans every discoverable
-	// profile in the directory regardless of what's currently active.
+	// --profiles/--profile narrows the scan; otherwise lint scans every
+	// discoverable profile in the directory regardless of what's currently active.
 	var profiles []string
 	if profilesFlagChanged() {
 		profiles = append([]string(nil), cfg.Profiles...)

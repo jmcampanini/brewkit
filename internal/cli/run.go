@@ -65,7 +65,7 @@ func runApply(ctx context.Context, t profile.Kind, args []string) error {
 		return err
 	}
 	if len(profiles) == 0 {
-		return fmt.Errorf("no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles, env_profiles, or add a *file.local")
+		return fmt.Errorf("no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles/--profile, env_profiles, or add a *file.local")
 	}
 
 	printer := newPrinter()
