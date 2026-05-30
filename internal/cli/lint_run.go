@@ -64,7 +64,7 @@ func runLint(_ context.Context) error {
 		}
 	}
 
-	w := os.Stdout
+	w := stdoutWriter()
 	if len(violations) == 0 {
 		if !flags.quiet {
 			if _, err := fmt.Fprintln(w, "no violations"); err != nil {

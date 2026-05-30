@@ -53,6 +53,7 @@ type PrinterOptions struct {
 	Color         bool
 	DryRun        bool
 	HideUnchanged bool
+	OutputPrefix  string
 	Spinner       bool
 	SpinnerWidth  int
 }
@@ -60,10 +61,12 @@ type PrinterOptions struct {
 type Printer struct {
 	out           io.Writer
 	err           io.Writer
+	spinnerErr    io.Writer
 	level         Level
 	dryRun        bool
 	hideUnchanged bool
 	color         bool
+	outputPrefix  string
 	spinner       bool
 	spinnerWidth  int
 	summary       Summary
@@ -75,13 +78,17 @@ func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 	if opts.Spinner && spinnerWidth <= 0 {
 		spinnerWidth = defaultSpinnerWidth
 	}
+	durableOut := NewLinePrefixWriter(out, opts.OutputPrefix)
+	durableErr := NewLinePrefixWriter(errOut, opts.OutputPrefix)
 	return &Printer{
-		out:           out,
-		err:           errOut,
+		out:           durableOut,
+		err:           durableErr,
+		spinnerErr:    errOut,
 		level:         opts.Level,
 		dryRun:        opts.DryRun,
 		hideUnchanged: opts.HideUnchanged,
 		color:         opts.Color,
+		outputPrefix:  opts.OutputPrefix,
 		spinner:       opts.Spinner,
 		spinnerWidth:  spinnerWidth,
 	}
@@ -216,8 +223,10 @@ func (p *Printer) writeBodyErr(line string) {
 }
 
 func (p *Printer) writeSpinnerFrame(frame, message string) {
-	line := p.styleDim(p.truncateSpinnerLine(frame + " " + message))
-	_, _ = fmt.Fprintf(p.err, "%s%s", spinnerClearSequence, line)
+	line := p.outputPrefix + frame + " " + message
+	line = p.truncateSpinnerLine(line)
+	line = p.styleDim(line)
+	_, _ = fmt.Fprintf(p.spinnerErr, "%s%s", spinnerClearSequence, line)
 }
 
 func (p *Printer) truncateSpinnerLine(line string) string {
@@ -235,7 +244,7 @@ func (p *Printer) truncateSpinnerLine(line string) string {
 }
 
 func (p *Printer) clearSpinner() {
-	_, _ = fmt.Fprint(p.err, spinnerClearSequence)
+	_, _ = fmt.Fprint(p.spinnerErr, spinnerClearSequence)
 }
 
 // Footer emits the final summary outside quiet mode. In quiet mode,
