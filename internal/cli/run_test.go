@@ -100,7 +100,7 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-func TestRootProfilesFlagRegisteredAndSingularProfileRemoved(t *testing.T) {
+func TestRootProfilesFlagsRegistered(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
@@ -108,11 +108,11 @@ func TestRootProfilesFlagRegisteredAndSingularProfileRemoved(t *testing.T) {
 	if root.PersistentFlags().Lookup("profiles") == nil {
 		t.Fatal("root should register --profiles")
 	}
+	if root.PersistentFlags().Lookup("profile") == nil {
+		t.Fatal("root should register singular --profile")
+	}
 	if root.PersistentFlags().Lookup("output-prefix") == nil {
 		t.Fatal("root should register --output-prefix")
-	}
-	if root.PersistentFlags().Lookup("profile") != nil {
-		t.Fatal("root should not preserve old --profile flag")
 	}
 }
 
@@ -1632,6 +1632,36 @@ func TestRunLint_Clean(t *testing.T) {
 	})
 	if !strings.Contains(out, "no violations") {
 		t.Errorf("expected 'no violations':\n%s", out)
+	}
+}
+
+func TestRunLint_ProfileFlagNarrowsScan(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.common": strings.Join([]string{
+			`brew "abc"  # a`,
+			`brew "def"  # d`,
+			``,
+		}, "\n"),
+		"Brewfile.other": strings.Join([]string{
+			`brew "z"  # z`,
+			`brew "a"  # a`,
+			``,
+		}, "\n"),
+	})
+
+	root := newRootCmd()
+	root.SetArgs([]string{"--config", filepath.Join(dir, "brewkit.toml"), "--profile", "common", "lint"})
+
+	out := captureStdout(t, func() {
+		if err := root.Execute(); err != nil {
+			t.Errorf("root.Execute err: %v", err)
+		}
+	})
+	if !strings.Contains(out, "no violations") {
+		t.Errorf("expected narrowed lint to ignore other profile violations:\n%s", out)
 	}
 }
 

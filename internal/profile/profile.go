@@ -69,7 +69,7 @@ func PathFor(dir string, k Kind, profile string) string {
 
 // Resolve computes the effective list of active profiles given the loaded raw
 // config. Config loading has already applied file, BREWKIT_PROFILES, and
-// --profiles precedence to cfg.Profiles. Runtime derivation appends profiles
+// --profiles/--profile precedence to cfg.Profiles. Runtime derivation appends profiles
 // from the environment variable named by cfg.EnvProfiles, de-duplicates while
 // preserving the first occurrence, validates profile names, then auto-appends
 // the reserved "local" profile if any *file.local exists in cfg.Dir.

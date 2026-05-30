@@ -59,7 +59,7 @@ brewkit head
 brewkit cask
 ```
 
-There is no implicit `common` profile; set `profiles` in `brewkit.toml`, use `BREWKIT_PROFILES=work,personal`, or pass `--profiles work,personal`.
+There is no implicit `common` profile; set `profiles` in `brewkit.toml`, use `BREWKIT_PROFILES=work,personal`, pass `--profiles work,personal`, or repeat `--profile work --profile personal`.
 
 Use `--hide-unchanged` with `tap`, `brew`, `head`, or `cask` to hide already-satisfied per-item lines while keeping the final summary accurate.
 
