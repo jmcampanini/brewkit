@@ -6,8 +6,11 @@ class Brewkit < Formula
   depends_on "go" => :build
 
   def install
-    ldflags = "-s -w -X github.com/jmcampanini/brewkit/internal/cli.Version=HEAD-#{Utils.git_short_head}"
-    system "go", "build", *std_go_args(output: bin/"brewkit", ldflags: ldflags), "./cmd/brewkit"
+    ldflags = %W[
+      -s -w
+      -X github.com/jmcampanini/brewkit/internal/cli.Version=#{version}
+    ]
+    system "go", "build", "-buildvcs=false", *std_go_args(output: bin/"brewkit", ldflags:), "./cmd/brewkit"
     generate_completions_from_executable(bin/"brewkit", "completion")
   end
 
