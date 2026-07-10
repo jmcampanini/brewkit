@@ -40,6 +40,18 @@ func newPrinter() *ui.Printer {
 	}
 	stdoutTTY := isTerminal(os.Stdout)
 	stderrTTY := isTerminal(os.Stderr)
+	stdoutProfile := terminalColorProfile(os.Stdout)
+	stderrProfile := terminalColorProfile(os.Stderr)
+	stdoutColorTerminal := stdoutTTY && terminalColorsEnabled(stdoutProfile)
+	stderrColorTerminal := stderrTTY && terminalColorsEnabled(stderrProfile)
+	themeOutput := os.Stdout
+	themeProfile := stdoutProfile
+	if !stdoutColorTerminal && stderrColorTerminal {
+		themeOutput = os.Stderr
+		themeProfile = stderrProfile
+	}
+	allowThemeQuery := level != ui.LevelQuiet
+	theme := ui.ThemeForBackground(terminalHasDarkBackground(themeOutput, themeProfile, allowThemeQuery))
 	spinner := level == ui.LevelNormal && stdoutTTY && stderrTTY
 	spinnerWidth := 0
 	if spinner {
@@ -50,7 +62,9 @@ func newPrinter() *ui.Printer {
 	}
 	return ui.New(os.Stdout, os.Stderr, ui.PrinterOptions{
 		Level:         level,
-		Color:         stdoutTTY,
+		OutputProfile: stdoutProfile,
+		ErrorProfile:  stderrProfile,
+		Theme:         theme,
 		DryRun:        flags.dryRun,
 		HideUnchanged: flags.hideUnchanged,
 		OutputPrefix:  flags.outputPrefix,

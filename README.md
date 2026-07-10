@@ -65,6 +65,8 @@ Use `--hide-unchanged` with `tap`, `brew`, `head`, or `cask` to hide already-sat
 
 Use `--output-prefix TEXT` to prefix output emitted by brewkit commands, including durable command output, errors, and transient progress frames. Help and version output are intentionally not prefixed.
 
+Interactive output automatically selects Catppuccin Latte on light terminal backgrounds and Catppuccin Frappe on dark backgrounds. Colors are downsampled to the terminal's capability, and any nonempty `NO_COLOR` disables them. Transient progress messages use three ASCII periods (`...`).
+
 Use `-q, --quiet` for errors-only operational runs; successful quiet `tap`, `brew`, `head`, `cask`, and `lint` commands are silent, while `lint -q` still prints violations. `--quiet` and `--verbose` cannot be combined.
 
 Run `brewkit docs` for the full file format and config reference.

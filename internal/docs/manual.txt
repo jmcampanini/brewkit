@@ -104,6 +104,18 @@ summary. Symbols:
   ⊘  skipped notice (e.g. missing profile file)
   ✗  error
 
+Interactive color output automatically selects Catppuccin Latte for a
+light terminal background and Catppuccin Frappe for a dark background.
+brewkit checks the COLORFGBG hint first. For non-quiet output without
+a hint, it queries when standard input and the selected output are
+terminals; otherwise it falls back to Frappe. Upgrade arrows use the
+palette's mauve accent; details, notices, and progress use its secondary
+text.
+Colors are downsampled for 16-color and 256-color terminals. Set any
+nonempty NO_COLOR value to disable color without disabling progress.
+Transient progress messages and truncation tails use three ASCII
+periods (...), not a single ellipsis character.
+
 On any non-zero brew exit the captured stdout/stderr is printed in
 full regardless of verbosity.
 
