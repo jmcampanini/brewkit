@@ -237,12 +237,12 @@ func (p *Printer) writeBodyErr(line string) {
 }
 
 func (p *Printer) writeSpinnerFrame(frame, message string) {
-	line := p.truncateSpinnerLine(p.outputPrefix + frame + " " + message)
-	if strings.HasPrefix(line, p.outputPrefix+frame) {
-		frameStart := len(p.outputPrefix)
-		line = p.errStyles.secondary(line[:frameStart]) +
+	prefixedFrame := p.outputPrefix + frame
+	line := p.truncateSpinnerLine(prefixedFrame + " " + message)
+	if strings.HasPrefix(line, prefixedFrame) {
+		line = p.errStyles.secondary(p.outputPrefix) +
 			p.errStyles.spinnerFrame(frame) +
-			p.errStyles.secondary(line[frameStart+len(frame):])
+			p.errStyles.secondary(line[len(prefixedFrame):])
 	} else {
 		line = p.errStyles.secondary(line)
 	}

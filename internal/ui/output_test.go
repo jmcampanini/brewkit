@@ -308,16 +308,27 @@ func TestPrinter_ColoredSpinnerTruncationStylesOnlyFrame(t *testing.T) {
 	tests := []struct {
 		name   string
 		prefix string
+		width  int
 		want   string
 	}{
 		{
-			name: "visible frame",
+			name:  "visible frame",
+			width: minSpinnerWidth,
 			want: trueColor("129;200;190", "⠋") +
+				trueColor("181;191;226", spinnerTruncateTail),
+		},
+		{
+			name:   "visible prefixed frame",
+			prefix: " ",
+			width:  minSpinnerWidth + 1,
+			want: trueColor("181;191;226", " ") +
+				trueColor("129;200;190", "⠋") +
 				trueColor("181;191;226", spinnerTruncateTail),
 		},
 		{
 			name:   "prefix displaces frame",
 			prefix: " ",
+			width:  minSpinnerWidth,
 			want:   trueColor("181;191;226", " "+spinnerTruncateTail),
 		},
 	}
@@ -330,7 +341,7 @@ func TestPrinter_ColoredSpinnerTruncationStylesOnlyFrame(t *testing.T) {
 				ErrorProfile: colorprofile.TrueColor,
 				Theme:        DarkTheme(),
 				OutputPrefix: tt.prefix,
-				SpinnerWidth: minSpinnerWidth,
+				SpinnerWidth: tt.width,
 			})
 			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
 
