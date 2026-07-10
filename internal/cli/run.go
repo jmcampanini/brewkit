@@ -42,9 +42,11 @@ func newPrinter() *ui.Printer {
 	stderrTTY := isTerminal(os.Stderr)
 	stdoutProfile := terminalColorProfile(os.Stdout)
 	stderrProfile := terminalColorProfile(os.Stderr)
+	stdoutColorTerminal := stdoutTTY && terminalColorsEnabled(stdoutProfile)
+	stderrColorTerminal := stderrTTY && terminalColorsEnabled(stderrProfile)
 	themeOutput := os.Stdout
 	themeProfile := stdoutProfile
-	if (!stdoutTTY || !terminalColorsEnabled(stdoutProfile)) && stderrTTY && terminalColorsEnabled(stderrProfile) {
+	if !stdoutColorTerminal && stderrColorTerminal {
 		themeOutput = os.Stderr
 		themeProfile = stderrProfile
 	}

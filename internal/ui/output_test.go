@@ -334,32 +334,38 @@ func TestPrinter_CatppuccinThemes(t *testing.T) {
 			p.RestartAppsNotice([]string{"chatgpt"})
 			p.Error("broken", "install failed", "")
 
+			gotOut := out.String()
+			gotErr := errOut.String()
 			upgrade := trueColor(tt.accentRGB, "↑") + " neovim " +
 				trueColor(tt.detailRGB, "0.10.0 ") +
 				trueColor(tt.accentRGB, "→") +
 				trueColor(tt.detailRGB, " 0.10.2") + "\n"
-			if !strings.HasPrefix(out.String(), upgrade) {
-				t.Fatalf("unexpected themed upgrade:\nwant prefix: %q\ngot:         %q", upgrade, out.String())
+			if !strings.HasPrefix(gotOut, upgrade) {
+				t.Fatalf("unexpected themed upgrade:\nwant prefix: %q\ngot:         %q", upgrade, gotOut)
 			}
 
-			combined := out.String() + errOut.String()
-			for role, rgb := range map[string]string{
-				"up to date": tt.okRGB,
-				"added":      tt.addedRGB,
-				"upgraded":   tt.accentRGB,
-				"error":      tt.errorRGB,
-				"detail":     tt.detailRGB,
-				"warning":    tt.warningRGB,
-			} {
-				if !strings.Contains(combined, "\x1b[38;2;"+rgb+"m") {
-					t.Errorf("%s color %s missing from %q", role, rgb, combined)
+			combined := gotOut + gotErr
+			colors := []struct {
+				role string
+				rgb  string
+			}{
+				{role: "up to date", rgb: tt.okRGB},
+				{role: "added", rgb: tt.addedRGB},
+				{role: "upgraded", rgb: tt.accentRGB},
+				{role: "error", rgb: tt.errorRGB},
+				{role: "detail", rgb: tt.detailRGB},
+				{role: "warning", rgb: tt.warningRGB},
+			}
+			for _, color := range colors {
+				if !strings.Contains(combined, "\x1b[38;2;"+color.rgb+"m") {
+					t.Errorf("%s color %s missing from %q", color.role, color.rgb, combined)
 				}
 			}
 			if strings.Contains(combined, "\x1b[2m") {
 				t.Fatalf("secondary text should use a palette color, not terminal faint: %q", combined)
 			}
-			if !strings.Contains(out.String(), trueColor(tt.warningRGB, "⚠")+" Restart these apps") {
-				t.Fatalf("only the warning glyph should carry the low-contrast yellow: %q", out.String())
+			if !strings.Contains(gotOut, trueColor(tt.warningRGB, "⚠")+" Restart these apps") {
+				t.Fatalf("only the warning glyph should carry the low-contrast yellow: %q", gotOut)
 			}
 		})
 	}

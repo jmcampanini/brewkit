@@ -73,20 +73,20 @@ func TestDetectDarkBackgroundPrecedence(t *testing.T) {
 		queryCalled = true
 		return false
 	}
-	if got := detectDarkBackground(colorprofile.ASCII, true, queryLight, "0;15"); got || queryCalled {
+	if got := detectDarkBackground(colorprofile.ASCII, queryLight, "0;15"); got || queryCalled {
 		t.Fatalf("COLORFGBG light detection = %v, query called = %v; want light without a query", got, queryCalled)
 	}
 
-	if got := detectDarkBackground(colorprofile.TrueColor, true, queryLight, "15;0"); !got || queryCalled {
+	if got := detectDarkBackground(colorprofile.TrueColor, queryLight, "15;0"); !got || queryCalled {
 		t.Fatalf("COLORFGBG dark detection = %v, query called = %v; want dark without a query", got, queryCalled)
 	}
-	if got := detectDarkBackground(colorprofile.ASCII, true, queryLight, "invalid"); !got || queryCalled {
+	if got := detectDarkBackground(colorprofile.ASCII, queryLight, "invalid"); !got || queryCalled {
 		t.Fatalf("color-disabled detection = %v, query called = %v; want dark without a query", got, queryCalled)
 	}
-	if got := detectDarkBackground(colorprofile.TrueColor, false, queryLight, "invalid"); !got || queryCalled {
+	if got := detectDarkBackground(colorprofile.TrueColor, nil, "invalid"); !got || queryCalled {
 		t.Fatalf("query-ineligible detection = %v, query called = %v; want dark without a query", got, queryCalled)
 	}
-	if got := detectDarkBackground(colorprofile.TrueColor, true, queryLight, "invalid"); got || !queryCalled {
+	if got := detectDarkBackground(colorprofile.TrueColor, queryLight, "invalid"); got || !queryCalled {
 		t.Fatalf("queried light detection = %v, query called = %v; want light from the query", got, queryCalled)
 	}
 }

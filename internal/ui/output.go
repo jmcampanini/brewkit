@@ -69,8 +69,6 @@ type Printer struct {
 	level         Level
 	dryRun        bool
 	hideUnchanged bool
-	outColor      bool
-	errColor      bool
 	outStyles     printerStyles
 	errStyles     printerStyles
 	outputPrefix  string
@@ -102,8 +100,6 @@ func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 		level:         opts.Level,
 		dryRun:        opts.DryRun,
 		hideUnchanged: opts.HideUnchanged,
-		outColor:      opts.OutputProfile > colorprofile.ASCII,
-		errColor:      opts.ErrorProfile > colorprofile.ASCII,
 		outStyles:     newPrinterStyles(opts.OutputProfile, theme),
 		errStyles:     newPrinterStyles(opts.ErrorProfile, theme),
 		outputPrefix:  opts.OutputPrefix,
@@ -130,13 +126,13 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 	if p.hideUnchanged && sym == SymUpToDate {
 		return
 	}
-	prefix := p.symbol(sym, p.outColor, p.outStyles)
+	prefix := p.outStyles.symbol(sym)
 	line := prefix + " " + name
 	if detail != "" {
-		line += " " + styleDetail(detail, p.outColor, p.outStyles)
+		line += " " + p.outStyles.detail(detail)
 	}
 	if p.dryRun && sym != SymUpToDate && sym != SymError {
-		line += " " + styleSecondary("(dry-run)", p.outColor, p.outStyles)
+		line += " " + p.outStyles.secondary("(dry-run)")
 	}
 	p.writeBodyOut(line)
 }
@@ -148,7 +144,7 @@ func (p *Printer) Notice(msg string) {
 	if p.level == LevelQuiet {
 		return
 	}
-	p.writeBodyOut(p.symbol(SymNotice, p.outColor, p.outStyles) + " " + styleSecondary(msg, p.outColor, p.outStyles))
+	p.writeBodyOut(p.outStyles.symbol(SymNotice) + " " + p.outStyles.secondary(msg))
 }
 
 // Verbose is a no-op outside LevelVerbose; it indents raw brew output
@@ -158,7 +154,7 @@ func (p *Printer) Verbose(content string) {
 		return
 	}
 	for _, line := range outputLines(content) {
-		p.writeBodyOut(detailIndent + styleSecondary(line, p.outColor, p.outStyles))
+		p.writeBodyOut(detailIndent + p.outStyles.secondary(line))
 	}
 }
 
@@ -167,7 +163,7 @@ func (p *Printer) Verbose(content string) {
 // the information" on failure).
 func (p *Printer) Error(name, msg, output string) {
 	p.summary.Errors++
-	prefix := p.symbol(SymError, p.errColor, p.errStyles)
+	prefix := p.errStyles.symbol(SymError)
 	p.writeBodyErr(prefix + " " + name + ": " + msg)
 	if strings.TrimSpace(output) == "" {
 		return
@@ -243,7 +239,7 @@ func (p *Printer) writeBodyErr(line string) {
 func (p *Printer) writeSpinnerFrame(frame, message string) {
 	line := p.outputPrefix + frame + " " + message
 	line = p.truncateSpinnerLine(line)
-	line = styleSecondary(line, p.errColor, p.errStyles)
+	line = p.errStyles.secondary(line)
 	_, _ = fmt.Fprintf(p.spinnerErr, "%s%s", spinnerClearSequence, line)
 }
 
@@ -305,30 +301,10 @@ func (p *Printer) RestartAppsNotice(names []string) {
 	if p.bodyWritten {
 		_, _ = fmt.Fprintln(p.out)
 	}
-	p.writeBodyOut(styleWarning("⚠", p.outColor, p.outStyles) + " Restart these apps to apply upgrades")
+	p.writeBodyOut(p.outStyles.warning("⚠") + " Restart these apps to apply upgrades")
 	for _, name := range names {
 		p.writeBodyOut("  " + name)
 	}
-}
-
-func (p *Printer) symbol(sym Symbol, colorEnabled bool, styles printerStyles) string {
-	plain := symbolText(sym)
-	if !colorEnabled {
-		return plain
-	}
-	switch sym {
-	case SymUpToDate:
-		return styles.ok.Render(plain)
-	case SymAdded:
-		return styles.added.Render(plain)
-	case SymUpgraded:
-		return styles.upgraded.Render(plain)
-	case SymError:
-		return styles.err.Render(plain)
-	case SymNotice:
-		return styles.detail.Render(plain)
-	}
-	return plain
 }
 
 func symbolText(sym Symbol) string {
@@ -350,46 +326,68 @@ func symbolText(sym Symbol) string {
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type printerStyles struct {
-	ok       lipgloss.Style
-	added    lipgloss.Style
-	upgraded lipgloss.Style
-	err      lipgloss.Style
-	detail   lipgloss.Style
-	warn     lipgloss.Style
+	enabled     bool
+	ok          lipgloss.Style
+	added       lipgloss.Style
+	upgraded    lipgloss.Style
+	err         lipgloss.Style
+	detailStyle lipgloss.Style
+	warn        lipgloss.Style
 }
 
 func newPrinterStyles(profile colorprofile.Profile, theme Theme) printerStyles {
 	return printerStyles{
-		ok:       lipgloss.NewStyle().Foreground(profile.Convert(theme.ok)),
-		added:    lipgloss.NewStyle().Foreground(profile.Convert(theme.added)),
-		upgraded: lipgloss.NewStyle().Foreground(profile.Convert(theme.upgraded)),
-		err:      lipgloss.NewStyle().Foreground(profile.Convert(theme.err)),
-		detail:   lipgloss.NewStyle().Foreground(profile.Convert(theme.detail)),
-		warn:     lipgloss.NewStyle().Foreground(profile.Convert(theme.warn)),
+		enabled:     profile > colorprofile.ASCII,
+		ok:          lipgloss.NewStyle().Foreground(profile.Convert(theme.ok)),
+		added:       lipgloss.NewStyle().Foreground(profile.Convert(theme.added)),
+		upgraded:    lipgloss.NewStyle().Foreground(profile.Convert(theme.upgraded)),
+		err:         lipgloss.NewStyle().Foreground(profile.Convert(theme.err)),
+		detailStyle: lipgloss.NewStyle().Foreground(profile.Convert(theme.detail)),
+		warn:        lipgloss.NewStyle().Foreground(profile.Convert(theme.warn)),
 	}
 }
 
-func styleSecondary(s string, colorEnabled bool, styles printerStyles) string {
-	if !colorEnabled {
-		return s
+func (s *printerStyles) symbol(sym Symbol) string {
+	plain := symbolText(sym)
+	if !s.enabled {
+		return plain
 	}
-	return styles.detail.Render(s)
+	switch sym {
+	case SymUpToDate:
+		return s.ok.Render(plain)
+	case SymAdded:
+		return s.added.Render(plain)
+	case SymUpgraded:
+		return s.upgraded.Render(plain)
+	case SymError:
+		return s.err.Render(plain)
+	case SymNotice:
+		return s.detailStyle.Render(plain)
+	}
+	return plain
 }
 
-func styleDetail(s string, colorEnabled bool, styles printerStyles) string {
-	if !colorEnabled {
-		return s
+func (s *printerStyles) secondary(text string) string {
+	if !s.enabled {
+		return text
 	}
-	parts := strings.Split(s, "→")
+	return s.detailStyle.Render(text)
+}
+
+func (s *printerStyles) detail(text string) string {
+	if !s.enabled {
+		return text
+	}
+	parts := strings.Split(text, "→")
 	for i := range parts {
-		parts[i] = styles.detail.Render(parts[i])
+		parts[i] = s.detailStyle.Render(parts[i])
 	}
-	return strings.Join(parts, styles.upgraded.Render("→"))
+	return strings.Join(parts, s.upgraded.Render("→"))
 }
 
-func styleWarning(s string, colorEnabled bool, styles printerStyles) string {
-	if !colorEnabled {
-		return s
+func (s *printerStyles) warning(text string) string {
+	if !s.enabled {
+		return text
 	}
-	return styles.warn.Render(s)
+	return s.warn.Render(text)
 }

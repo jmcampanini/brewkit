@@ -43,28 +43,22 @@ func terminalColorsEnabled(profile colorprofile.Profile) bool {
 }
 
 func terminalHasDarkBackground(out *os.File, profile colorprofile.Profile, allowQuery bool) bool {
-	return detectDarkBackground(
-		profile,
-		allowQuery && terminalCanQueryBackground(out),
-		func() bool { return lipgloss.HasDarkBackground(os.Stdin, out) },
-		os.Getenv("COLORFGBG"),
-	)
+	var query func() bool
+	if allowQuery && terminalCanQueryBackground(out) {
+		query = func() bool { return lipgloss.HasDarkBackground(os.Stdin, out) }
+	}
+	return detectDarkBackground(profile, query, os.Getenv("COLORFGBG"))
 }
 
 func terminalCanQueryBackground(out *os.File) bool {
 	return out != nil && isTerminal(os.Stdin) && isTerminal(out)
 }
 
-func detectDarkBackground(
-	profile colorprofile.Profile,
-	canQuery bool,
-	query func() bool,
-	colorFGBG string,
-) bool {
+func detectDarkBackground(profile colorprofile.Profile, query func() bool, colorFGBG string) bool {
 	if dark, ok := darkBackgroundFromEnv(colorFGBG); ok {
 		return dark
 	}
-	if profile <= colorprofile.ASCII || !canQuery || query == nil {
+	if profile <= colorprofile.ASCII || query == nil {
 		return true
 	}
 	return query()
