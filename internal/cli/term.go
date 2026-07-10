@@ -22,7 +22,20 @@ func terminalColorProfile(w io.Writer) colorprofile.Profile {
 	if os.Getenv("NO_COLOR") != "" {
 		return colorprofile.ASCII
 	}
-	return colorprofile.Detect(w, os.Environ())
+	return colorprofile.Detect(w, terminalColorEnvironment())
+}
+
+func terminalColorEnvironment() []string {
+	// colorprofile.Detect runs tmux info without a timeout when TMUX is present.
+	env := os.Environ()
+	filtered := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if key != "TMUX" {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func terminalColorsEnabled(profile colorprofile.Profile) bool {

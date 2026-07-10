@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -44,6 +45,25 @@ func TestTerminalColorProfileHonorsAnyNonemptyNoColor(t *testing.T) {
 
 	if got := terminalColorProfile(&bytes.Buffer{}); got != colorprofile.ASCII {
 		t.Fatalf("terminalColorProfile with NO_COLOR = %v, want ASCII", got)
+	}
+}
+
+func TestTerminalColorEnvironmentOmitsTmux(t *testing.T) {
+	t.Setenv("TMUX", "/private/tmp/tmux/default,1,0")
+	t.Setenv("BREWKIT_TEST_COLOR_ENV", "kept")
+
+	foundKept := false
+	for _, entry := range terminalColorEnvironment() {
+		key, value, _ := strings.Cut(entry, "=")
+		switch key {
+		case "TMUX":
+			t.Fatalf("terminal color environment should omit TMUX: %q", entry)
+		case "BREWKIT_TEST_COLOR_ENV":
+			foundKept = value == "kept"
+		}
+	}
+	if !foundKept {
+		t.Fatal("terminal color environment should preserve unrelated variables")
 	}
 }
 
