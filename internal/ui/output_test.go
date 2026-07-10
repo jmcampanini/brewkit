@@ -224,6 +224,134 @@ func TestPrinter_OutputPrefixPrefixesSpinner(t *testing.T) {
 	}
 }
 
+func TestPrinter_SpinnerUsesTealAccent(t *testing.T) {
+	tests := []struct {
+		name       string
+		theme      Theme
+		spinnerRGB string
+		detailRGB  string
+	}{
+		{
+			name:       "Latte on a light background",
+			theme:      LightTheme(),
+			spinnerRGB: "23;146;153",
+			detailRGB:  "92;95;119",
+		},
+		{
+			name:       "Frappe on a dark background",
+			theme:      DarkTheme(),
+			spinnerRGB: "129;200;190",
+			detailRGB:  "181;191;226",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errOut := &bytes.Buffer{}
+			p := New(&bytes.Buffer{}, errOut, PrinterOptions{
+				Level:        LevelNormal,
+				ErrorProfile: colorprofile.TrueColor,
+				Theme:        tt.theme,
+			})
+			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
+
+			want := spinnerClearSequence +
+				trueColor(tt.spinnerRGB, "⠋") +
+				trueColor(tt.detailRGB, " Installing ripgrep...")
+			if got := errOut.String(); got != want {
+				t.Fatalf("unexpected themed spinner:\nwant: %q\ngot:  %q", want, got)
+			}
+		})
+	}
+}
+
+func TestPrinter_SpinnerHonorsErrorColorProfile(t *testing.T) {
+	tests := []struct {
+		name        string
+		profile     colorprofile.Profile
+		wantColor   bool
+		wantANSI256 bool
+	}{
+		{name: "ASCII", profile: colorprofile.ASCII},
+		{name: "ANSI", profile: colorprofile.ANSI, wantColor: true},
+		{name: "ANSI256", profile: colorprofile.ANSI256, wantColor: true, wantANSI256: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errOut := &bytes.Buffer{}
+			p := New(&bytes.Buffer{}, errOut, PrinterOptions{
+				Level:        LevelNormal,
+				ErrorProfile: tt.profile,
+				Theme:        DarkTheme(),
+			})
+			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
+
+			rendered := strings.TrimPrefix(errOut.String(), spinnerClearSequence)
+			if got, want := ansi.Strip(rendered), "⠋ Installing ripgrep..."; got != want {
+				t.Fatalf("plain spinner = %q, want %q", got, want)
+			}
+			if got := strings.Contains(rendered, "\x1b["); got != tt.wantColor {
+				t.Fatalf("color sequence present = %v, want %v: %q", got, tt.wantColor, rendered)
+			}
+			if strings.Contains(rendered, "38;2;") {
+				t.Fatalf("%s spinner should not contain truecolor: %q", tt.name, rendered)
+			}
+			if got := strings.Contains(rendered, "38;5;"); got != tt.wantANSI256 {
+				t.Fatalf("ANSI256 sequence present = %v, want %v: %q", got, tt.wantANSI256, rendered)
+			}
+		})
+	}
+}
+
+func TestPrinter_ColoredSpinnerTruncationStylesOnlyFrame(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix string
+		width  int
+		want   string
+	}{
+		{
+			name:  "visible frame",
+			width: minSpinnerWidth,
+			want: trueColor("129;200;190", "⠋") +
+				trueColor("181;191;226", spinnerTruncateTail),
+		},
+		{
+			name:   "visible prefixed frame",
+			prefix: " ",
+			width:  minSpinnerWidth + 1,
+			want: trueColor("181;191;226", " ") +
+				trueColor("129;200;190", "⠋") +
+				trueColor("181;191;226", spinnerTruncateTail),
+		},
+		{
+			name:   "prefix displaces frame",
+			prefix: " ",
+			width:  minSpinnerWidth,
+			want:   trueColor("181;191;226", " "+spinnerTruncateTail),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errOut := &bytes.Buffer{}
+			p := New(&bytes.Buffer{}, errOut, PrinterOptions{
+				Level:        LevelNormal,
+				ErrorProfile: colorprofile.TrueColor,
+				Theme:        DarkTheme(),
+				OutputPrefix: tt.prefix,
+				SpinnerWidth: tt.width,
+			})
+			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
+
+			if got := strings.TrimPrefix(errOut.String(), spinnerClearSequence); got != tt.want {
+				t.Fatalf("unexpected truncated spinner:\nwant: %q\ngot:  %q", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestPrinter_SpinnerTruncatesToTerminalWidth(t *testing.T) {
 	p := New(&bytes.Buffer{}, &bytes.Buffer{}, PrinterOptions{
 		Level:        LevelNormal,
