@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"image/color"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -24,7 +23,7 @@ func TestDarkBackgroundFromEnv(t *testing.T) {
 		{name: "bright color", value: "0;9", dark: false, ok: true},
 		{name: "white", value: "0;15", dark: false, ok: true},
 		{name: "extra fields use last", value: "1;2;0", dark: true, ok: true},
-		{name: "negative", value: "15;-1", ok: false},
+		{name: "negative follows Grove classification", value: "15;-1", dark: true, ok: true},
 		{name: "invalid", value: "15;white", ok: false},
 	}
 
@@ -33,28 +32,6 @@ func TestDarkBackgroundFromEnv(t *testing.T) {
 			dark, ok := darkBackgroundFromEnv(tt.value)
 			if dark != tt.dark || ok != tt.ok {
 				t.Fatalf("darkBackgroundFromEnv(%q) = (%v, %v), want (%v, %v)", tt.value, dark, ok, tt.dark, tt.ok)
-			}
-		})
-	}
-}
-
-func TestIsDarkColor(t *testing.T) {
-	tests := []struct {
-		name  string
-		color color.Color
-		dark  bool
-	}{
-		{name: "missing color", color: nil, dark: true},
-		{name: "black", color: color.RGBA{R: 0, G: 0, B: 0, A: 255}, dark: true},
-		{name: "white", color: color.RGBA{R: 255, G: 255, B: 255, A: 255}, dark: false},
-		{name: "Catppuccin Frappe base", color: color.RGBA{R: 48, G: 52, B: 70, A: 255}, dark: true},
-		{name: "Catppuccin Latte base", color: color.RGBA{R: 239, G: 241, B: 245, A: 255}, dark: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isDarkColor(tt.color); got != tt.dark {
-				t.Fatalf("isDarkColor(%v) = %v, want %v", tt.color, got, tt.dark)
 			}
 		})
 	}
@@ -72,27 +49,25 @@ func TestTerminalColorProfileHonorsAnyNonemptyNoColor(t *testing.T) {
 
 func TestDetectDarkBackgroundPrecedence(t *testing.T) {
 	queryCalled := false
-	queryLight := func() (color.Color, bool) {
+	queryLight := func() bool {
 		queryCalled = true
-		return color.White, true
+		return false
 	}
-	if got := detectDarkBackground(colorprofile.ASCII, queryLight, "0;15"); !got || queryCalled {
-		t.Fatalf("color-disabled detection = %v, query called = %v; want dark without a query", got, queryCalled)
+	if got := detectDarkBackground(colorprofile.ASCII, true, queryLight, "0;15"); got || queryCalled {
+		t.Fatalf("COLORFGBG light detection = %v, query called = %v; want light without a query", got, queryCalled)
 	}
 
-	if got := detectDarkBackground(colorprofile.TrueColor, queryLight, "15;0"); got {
-		t.Fatal("a light terminal query should override a dark COLORFGBG hint")
+	if got := detectDarkBackground(colorprofile.TrueColor, true, queryLight, "15;0"); !got || queryCalled {
+		t.Fatalf("COLORFGBG dark detection = %v, query called = %v; want dark without a query", got, queryCalled)
 	}
-	queryDark := func() (color.Color, bool) { return color.Black, true }
-	if got := detectDarkBackground(colorprofile.TrueColor, queryDark, "0;15"); !got {
-		t.Fatal("a dark terminal query should override a light COLORFGBG hint")
+	if got := detectDarkBackground(colorprofile.ASCII, true, queryLight, "invalid"); !got || queryCalled {
+		t.Fatalf("color-disabled detection = %v, query called = %v; want dark without a query", got, queryCalled)
 	}
-	queryFailed := func() (color.Color, bool) { return nil, false }
-	if got := detectDarkBackground(colorprofile.TrueColor, queryFailed, "0;15"); got {
-		t.Fatal("a failed query should fall back to a light COLORFGBG hint")
+	if got := detectDarkBackground(colorprofile.TrueColor, false, queryLight, "invalid"); !got || queryCalled {
+		t.Fatalf("query-ineligible detection = %v, query called = %v; want dark without a query", got, queryCalled)
 	}
-	if got := detectDarkBackground(colorprofile.TrueColor, queryFailed, "invalid"); !got {
-		t.Fatal("failed query and invalid COLORFGBG should fall back to dark")
+	if got := detectDarkBackground(colorprofile.TrueColor, true, queryLight, "invalid"); got || !queryCalled {
+		t.Fatalf("queried light detection = %v, query called = %v; want light from the query", got, queryCalled)
 	}
 }
 
