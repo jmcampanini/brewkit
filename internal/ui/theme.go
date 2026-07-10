@@ -14,6 +14,7 @@ type Theme struct {
 	err      color.Color
 	detail   color.Color
 	warn     color.Color
+	spinner  color.Color
 }
 
 func ThemeForBackground(dark bool) Theme {
@@ -32,6 +33,7 @@ func LightTheme() Theme {
 		err:      lipgloss.Color("#d20f39"),
 		detail:   lipgloss.Color("#5c5f77"),
 		warn:     lipgloss.Color("#df8e1d"),
+		spinner:  lipgloss.Color("#179299"),
 	}
 }
 
@@ -44,5 +46,6 @@ func DarkTheme() Theme {
 		err:      lipgloss.Color("#e78284"),
 		detail:   lipgloss.Color("#b5bfe2"),
 		warn:     lipgloss.Color("#e5c890"),
+		spinner:  lipgloss.Color("#81c8be"),
 	}
 }

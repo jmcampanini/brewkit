@@ -237,9 +237,15 @@ func (p *Printer) writeBodyErr(line string) {
 }
 
 func (p *Printer) writeSpinnerFrame(frame, message string) {
-	line := p.outputPrefix + frame + " " + message
-	line = p.truncateSpinnerLine(line)
-	line = p.errStyles.secondary(line)
+	line := p.truncateSpinnerLine(p.outputPrefix + frame + " " + message)
+	if strings.HasPrefix(line, p.outputPrefix+frame) {
+		frameStart := len(p.outputPrefix)
+		line = p.errStyles.secondary(line[:frameStart]) +
+			p.errStyles.spinnerFrame(frame) +
+			p.errStyles.secondary(line[frameStart+len(frame):])
+	} else {
+		line = p.errStyles.secondary(line)
+	}
 	_, _ = fmt.Fprintf(p.spinnerErr, "%s%s", spinnerClearSequence, line)
 }
 
@@ -333,6 +339,7 @@ type printerStyles struct {
 	err         lipgloss.Style
 	detailStyle lipgloss.Style
 	warn        lipgloss.Style
+	spinner     lipgloss.Style
 }
 
 func newPrinterStyles(profile colorprofile.Profile, theme Theme) printerStyles {
@@ -344,6 +351,7 @@ func newPrinterStyles(profile colorprofile.Profile, theme Theme) printerStyles {
 		err:         lipgloss.NewStyle().Foreground(profile.Convert(theme.err)),
 		detailStyle: lipgloss.NewStyle().Foreground(profile.Convert(theme.detail)),
 		warn:        lipgloss.NewStyle().Foreground(profile.Convert(theme.warn)),
+		spinner:     lipgloss.NewStyle().Foreground(profile.Convert(theme.spinner)),
 	}
 }
 
@@ -368,10 +376,17 @@ func (s *printerStyles) symbol(sym Symbol) string {
 }
 
 func (s *printerStyles) secondary(text string) string {
-	if !s.enabled {
+	if !s.enabled || text == "" {
 		return text
 	}
 	return s.detailStyle.Render(text)
+}
+
+func (s *printerStyles) spinnerFrame(frame string) string {
+	if !s.enabled {
+		return frame
+	}
+	return s.spinner.Render(frame)
 }
 
 func (s *printerStyles) detail(text string) string {
