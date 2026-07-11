@@ -39,7 +39,7 @@ func (b *progressBrewer) withResult(message string, fn func() (brew.Result, erro
 
 func (b *progressBrewer) State(ctx context.Context) (*brew.State, error) {
 	var state *brew.State
-	err := b.withSpinner("Checking Homebrew state…", func() error {
+	err := b.withSpinner("Checking Homebrew state...", func() error {
 		var opErr error
 		state, opErr = b.next.State(ctx)
 		return opErr
@@ -48,31 +48,31 @@ func (b *progressBrewer) State(ctx context.Context) (*brew.State, error) {
 }
 
 func (b *progressBrewer) Tap(ctx context.Context, name, url string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Tapping %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Tapping %s...", name), func() (brew.Result, error) {
 		return b.next.Tap(ctx, name, url)
 	})
 }
 
 func (b *progressBrewer) BrewInstall(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Installing %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Installing %s...", name), func() (brew.Result, error) {
 		return b.next.BrewInstall(ctx, name)
 	})
 }
 
 func (b *progressBrewer) BrewUpgrade(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Upgrading %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Upgrading %s...", name), func() (brew.Result, error) {
 		return b.next.BrewUpgrade(ctx, name)
 	})
 }
 
 func (b *progressBrewer) HeadInstall(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Installing HEAD %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Installing HEAD %s...", name), func() (brew.Result, error) {
 		return b.next.HeadInstall(ctx, name)
 	})
 }
 
 func (b *progressBrewer) HeadReinstall(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Reinstalling HEAD %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Reinstalling HEAD %s...", name), func() (brew.Result, error) {
 		return b.next.HeadReinstall(ctx, name)
 	})
 }
@@ -81,7 +81,7 @@ func (b *progressBrewer) HeadInstalledSHA(ctx context.Context, name string) (str
 	var sha string
 	var installedAsHead bool
 	var installed bool
-	err := b.withSpinner(fmt.Sprintf("Checking HEAD %s…", name), func() error {
+	err := b.withSpinner(fmt.Sprintf("Checking HEAD %s...", name), func() error {
 		var opErr error
 		sha, installedAsHead, installed, opErr = b.next.HeadInstalledSHA(ctx, name)
 		return opErr
@@ -92,7 +92,7 @@ func (b *progressBrewer) HeadInstalledSHA(ctx context.Context, name string) (str
 func (b *progressBrewer) HeadLatestSHA(ctx context.Context, name string) (string, bool, error) {
 	var sha string
 	var hasHead bool
-	err := b.withSpinner(fmt.Sprintf("Checking latest HEAD %s…", name), func() error {
+	err := b.withSpinner(fmt.Sprintf("Checking latest HEAD %s...", name), func() error {
 		var opErr error
 		sha, hasHead, opErr = b.next.HeadLatestSHA(ctx, name)
 		return opErr
@@ -101,13 +101,13 @@ func (b *progressBrewer) HeadLatestSHA(ctx context.Context, name string) (string
 }
 
 func (b *progressBrewer) CaskInstall(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Installing %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Installing %s...", name), func() (brew.Result, error) {
 		return b.next.CaskInstall(ctx, name)
 	})
 }
 
 func (b *progressBrewer) CaskUpgrade(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Upgrading %s…", name), func() (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Upgrading %s...", name), func() (brew.Result, error) {
 		return b.next.CaskUpgrade(ctx, name)
 	})
 }

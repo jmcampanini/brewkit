@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -156,7 +157,7 @@ func TestPrinter_SpinnerDisabledIsSilentAndPreservesError(t *testing.T) {
 	wantErr := errors.New("boom")
 	called := false
 
-	err := p.WithSpinner("Checking Homebrew state…", func() error {
+	err := p.WithSpinner("Checking Homebrew state...", func() error {
 		called = true
 		return wantErr
 	})
@@ -177,7 +178,7 @@ func TestPrinter_SpinnerActiveWritesOnlyTransientStderr(t *testing.T) {
 	errOut := newSignalWriter()
 	p := New(out, errOut, PrinterOptions{Level: LevelNormal, Spinner: true})
 
-	if err := p.WithSpinner("Installing ripgrep…", func() error {
+	if err := p.WithSpinner("Installing ripgrep...", func() error {
 		select {
 		case <-errOut.wrote:
 			return nil
@@ -192,7 +193,7 @@ func TestPrinter_SpinnerActiveWritesOnlyTransientStderr(t *testing.T) {
 		t.Fatalf("spinner should not write durable stdout output: %q", out.String())
 	}
 	got := errOut.String()
-	if !strings.Contains(got, "Installing ripgrep…") || !strings.HasSuffix(got, spinnerClearSequence) {
+	if !strings.Contains(got, "Installing ripgrep...") || !strings.HasSuffix(got, spinnerClearSequence) {
 		t.Fatalf("spinner should render then clear stderr; got %q", got)
 	}
 }
@@ -206,7 +207,7 @@ func TestPrinter_OutputPrefixPrefixesSpinner(t *testing.T) {
 		Spinner:      true,
 	})
 
-	if err := p.WithSpinner("Installing ripgrep…", func() error {
+	if err := p.WithSpinner("Installing ripgrep...", func() error {
 		select {
 		case <-errOut.wrote:
 			return nil
@@ -218,8 +219,136 @@ func TestPrinter_OutputPrefixPrefixesSpinner(t *testing.T) {
 	}
 
 	got := errOut.String()
-	if !strings.Contains(got, "  ⠋ Installing ripgrep…") {
+	if !strings.Contains(got, "  ⠋ Installing ripgrep...") {
 		t.Fatalf("spinner should include output prefix; got %q", got)
+	}
+}
+
+func TestPrinter_SpinnerUsesTealAccent(t *testing.T) {
+	tests := []struct {
+		name       string
+		theme      Theme
+		spinnerRGB string
+		detailRGB  string
+	}{
+		{
+			name:       "Latte on a light background",
+			theme:      LightTheme(),
+			spinnerRGB: "23;146;153",
+			detailRGB:  "92;95;119",
+		},
+		{
+			name:       "Frappe on a dark background",
+			theme:      DarkTheme(),
+			spinnerRGB: "129;200;190",
+			detailRGB:  "181;191;226",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errOut := &bytes.Buffer{}
+			p := New(&bytes.Buffer{}, errOut, PrinterOptions{
+				Level:        LevelNormal,
+				ErrorProfile: colorprofile.TrueColor,
+				Theme:        tt.theme,
+			})
+			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
+
+			want := spinnerClearSequence +
+				trueColor(tt.spinnerRGB, "⠋") +
+				trueColor(tt.detailRGB, " Installing ripgrep...")
+			if got := errOut.String(); got != want {
+				t.Fatalf("unexpected themed spinner:\nwant: %q\ngot:  %q", want, got)
+			}
+		})
+	}
+}
+
+func TestPrinter_SpinnerHonorsErrorColorProfile(t *testing.T) {
+	tests := []struct {
+		name        string
+		profile     colorprofile.Profile
+		wantColor   bool
+		wantANSI256 bool
+	}{
+		{name: "ASCII", profile: colorprofile.ASCII},
+		{name: "ANSI", profile: colorprofile.ANSI, wantColor: true},
+		{name: "ANSI256", profile: colorprofile.ANSI256, wantColor: true, wantANSI256: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errOut := &bytes.Buffer{}
+			p := New(&bytes.Buffer{}, errOut, PrinterOptions{
+				Level:        LevelNormal,
+				ErrorProfile: tt.profile,
+				Theme:        DarkTheme(),
+			})
+			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
+
+			rendered := strings.TrimPrefix(errOut.String(), spinnerClearSequence)
+			if got, want := ansi.Strip(rendered), "⠋ Installing ripgrep..."; got != want {
+				t.Fatalf("plain spinner = %q, want %q", got, want)
+			}
+			if got := strings.Contains(rendered, "\x1b["); got != tt.wantColor {
+				t.Fatalf("color sequence present = %v, want %v: %q", got, tt.wantColor, rendered)
+			}
+			if strings.Contains(rendered, "38;2;") {
+				t.Fatalf("%s spinner should not contain truecolor: %q", tt.name, rendered)
+			}
+			if got := strings.Contains(rendered, "38;5;"); got != tt.wantANSI256 {
+				t.Fatalf("ANSI256 sequence present = %v, want %v: %q", got, tt.wantANSI256, rendered)
+			}
+		})
+	}
+}
+
+func TestPrinter_ColoredSpinnerTruncationStylesOnlyFrame(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix string
+		width  int
+		want   string
+	}{
+		{
+			name:  "visible frame",
+			width: minSpinnerWidth,
+			want: trueColor("129;200;190", "⠋") +
+				trueColor("181;191;226", spinnerTruncateTail),
+		},
+		{
+			name:   "visible prefixed frame",
+			prefix: " ",
+			width:  minSpinnerWidth + 1,
+			want: trueColor("181;191;226", " ") +
+				trueColor("129;200;190", "⠋") +
+				trueColor("181;191;226", spinnerTruncateTail),
+		},
+		{
+			name:   "prefix displaces frame",
+			prefix: " ",
+			width:  minSpinnerWidth,
+			want:   trueColor("181;191;226", " "+spinnerTruncateTail),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errOut := &bytes.Buffer{}
+			p := New(&bytes.Buffer{}, errOut, PrinterOptions{
+				Level:        LevelNormal,
+				ErrorProfile: colorprofile.TrueColor,
+				Theme:        DarkTheme(),
+				OutputPrefix: tt.prefix,
+				SpinnerWidth: tt.width,
+			})
+			p.writeSpinnerFrame("⠋", "Installing ripgrep...")
+
+			if got := strings.TrimPrefix(errOut.String(), spinnerClearSequence); got != tt.want {
+				t.Fatalf("unexpected truncated spinner:\nwant: %q\ngot:  %q", tt.want, got)
+			}
+		})
 	}
 }
 
@@ -281,6 +410,182 @@ func TestPrinter_FooterNothingToDo(t *testing.T) {
 	if out.String() != want {
 		t.Errorf("unexpected footer output:\nwant: %q\ngot:  %q", want, out.String())
 	}
+}
+
+func TestPrinter_CatppuccinThemes(t *testing.T) {
+	tests := []struct {
+		name       string
+		theme      Theme
+		okRGB      string
+		addedRGB   string
+		accentRGB  string
+		errorRGB   string
+		detailRGB  string
+		warningRGB string
+	}{
+		{
+			name:       "Latte on a light background",
+			theme:      LightTheme(),
+			okRGB:      "64;160;43",
+			addedRGB:   "30;102;245",
+			accentRGB:  "136;57;239",
+			errorRGB:   "210;15;57",
+			detailRGB:  "92;95;119",
+			warningRGB: "223;142;29",
+		},
+		{
+			name:       "Frappe on a dark background",
+			theme:      DarkTheme(),
+			okRGB:      "166;209;137",
+			addedRGB:   "140;170;238",
+			accentRGB:  "202;158;230",
+			errorRGB:   "231;130;132",
+			detailRGB:  "181;191;226",
+			warningRGB: "229;200;144",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			errOut := &bytes.Buffer{}
+			p := New(out, errOut, PrinterOptions{
+				Level:         LevelNormal,
+				OutputProfile: colorprofile.TrueColor,
+				ErrorProfile:  colorprofile.TrueColor,
+				Theme:         tt.theme,
+			})
+			p.Item(SymUpgraded, "neovim", "0.10.0 → 0.10.2")
+			p.Item(SymUpToDate, "git", "(2.45.0)")
+			p.Item(SymAdded, "ripgrep", "")
+			p.Notice("work: no Headfile, skipping")
+			p.RestartAppsNotice([]string{"chatgpt"})
+			p.Error("broken", "install failed", "")
+
+			gotOut := out.String()
+			gotErr := errOut.String()
+			upgrade := trueColor(tt.accentRGB, "↑") + " neovim " +
+				trueColor(tt.detailRGB, "0.10.0 ") +
+				trueColor(tt.accentRGB, "→") +
+				trueColor(tt.detailRGB, " 0.10.2") + "\n"
+			if !strings.HasPrefix(gotOut, upgrade) {
+				t.Fatalf("unexpected themed upgrade:\nwant prefix: %q\ngot:         %q", upgrade, gotOut)
+			}
+
+			combined := gotOut + gotErr
+			colors := []struct {
+				role string
+				rgb  string
+			}{
+				{role: "up to date", rgb: tt.okRGB},
+				{role: "added", rgb: tt.addedRGB},
+				{role: "upgraded", rgb: tt.accentRGB},
+				{role: "error", rgb: tt.errorRGB},
+				{role: "detail", rgb: tt.detailRGB},
+				{role: "warning", rgb: tt.warningRGB},
+			}
+			for _, color := range colors {
+				if !strings.Contains(combined, "\x1b[38;2;"+color.rgb+"m") {
+					t.Errorf("%s color %s missing from %q", color.role, color.rgb, combined)
+				}
+			}
+			if strings.Contains(combined, "\x1b[2m") {
+				t.Fatalf("secondary text should use a palette color, not terminal faint: %q", combined)
+			}
+			if !strings.Contains(gotOut, trueColor(tt.warningRGB, "⚠")+" Restart these apps") {
+				t.Fatalf("only the warning glyph should carry the low-contrast yellow: %q", gotOut)
+			}
+		})
+	}
+}
+
+func TestThemeForBackground(t *testing.T) {
+	if got := ThemeForBackground(false).name; got != "Catppuccin Latte" {
+		t.Fatalf("light background theme = %q, want Catppuccin Latte", got)
+	}
+	if got := ThemeForBackground(true).name; got != "Catppuccin Frappe" {
+		t.Fatalf("dark background theme = %q, want Catppuccin Frappe", got)
+	}
+}
+
+func TestPrinter_UsesIndependentOutputProfiles(t *testing.T) {
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	p := New(out, errOut, PrinterOptions{
+		Level:         LevelNormal,
+		OutputProfile: colorprofile.ASCII,
+		ErrorProfile:  colorprofile.TrueColor,
+		Theme:         DarkTheme(),
+	})
+	p.Item(SymAdded, "ripgrep", "")
+	p.Error("git", "install failed", "")
+
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("ASCII stdout profile should be plain: %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "\x1b[38;2;231;130;132m✗\x1b[m") {
+		t.Fatalf("truecolor stderr profile should remain colored: %q", errOut.String())
+	}
+}
+
+func TestPrinter_DownsamplesThemeForLimitedProfiles(t *testing.T) {
+	tests := []struct {
+		name        string
+		profile     colorprofile.Profile
+		wantANSI256 bool
+	}{
+		{name: "ANSI", profile: colorprofile.ANSI},
+		{name: "ANSI256", profile: colorprofile.ANSI256, wantANSI256: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := &bytes.Buffer{}
+			p := New(out, &bytes.Buffer{}, PrinterOptions{
+				Level:         LevelNormal,
+				OutputProfile: tt.profile,
+				Theme:         DarkTheme(),
+			})
+			p.Item(SymUpgraded, "neovim", "1 → 2")
+
+			if !strings.Contains(out.String(), "\x1b[") {
+				t.Fatalf("%s profile should retain color: %q", tt.name, out.String())
+			}
+			if strings.Contains(out.String(), "38;2;") {
+				t.Fatalf("%s profile should downsample truecolor: %q", tt.name, out.String())
+			}
+			if got := strings.Contains(out.String(), "38;5;"); got != tt.wantANSI256 {
+				t.Fatalf("%s ANSI256 sequence present = %v, want %v: %q", tt.name, got, tt.wantANSI256, out.String())
+			}
+		})
+	}
+}
+
+func TestPrinter_SpinnerNeedsRoomForThreeDotTail(t *testing.T) {
+	tooNarrow := New(&bytes.Buffer{}, &bytes.Buffer{}, PrinterOptions{
+		Level:        LevelNormal,
+		Spinner:      true,
+		SpinnerWidth: minSpinnerWidth - 1,
+	})
+	if tooNarrow.spinner {
+		t.Fatal("spinner should be disabled when only the three-dot tail would fit")
+	}
+
+	usable := New(&bytes.Buffer{}, &bytes.Buffer{}, PrinterOptions{
+		Level:        LevelNormal,
+		Spinner:      true,
+		SpinnerWidth: minSpinnerWidth,
+	})
+	if !usable.spinner {
+		t.Fatal("spinner should be enabled when one content cell and the three-dot tail fit")
+	}
+	if got := usable.truncateSpinnerLine("⠋ Installing ripgrep..."); got != "⠋..." {
+		t.Fatalf("narrow spinner = %q, want %q", got, "⠋...")
+	}
+}
+
+func trueColor(rgb, s string) string {
+	return "\x1b[38;2;" + rgb + "m" + s + "\x1b[m"
 }
 
 func TestLinePrefixWriterPrefixesEachLine(t *testing.T) {
