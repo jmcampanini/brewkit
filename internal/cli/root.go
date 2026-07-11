@@ -1,3 +1,4 @@
+// Package cli wires the cobra commands for the brewkit binary.
 package cli
 
 import (

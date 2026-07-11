@@ -2,7 +2,6 @@ version: "2"
 
 run:
   timeout: 5m
-  tests: true
 
 linters:
   default: none
@@ -12,7 +11,12 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+    - misspell
+    - unconvert
+    - gocritic
+    - revive
 
 formatters:
   enable:
     - gofmt
+    - goimports

@@ -16,6 +16,7 @@ type State struct {
 	Casks    map[string]CaskState
 }
 
+// FormulaState is the snapshot of one installed (or missing) formula.
 type FormulaState struct {
 	Installed  bool
 	Version    string
@@ -24,6 +25,7 @@ type FormulaState struct {
 	OutdatedTo string
 }
 
+// CaskState is the snapshot of one installed (or missing) cask.
 type CaskState struct {
 	Installed  bool
 	Version    string
