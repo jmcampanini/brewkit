@@ -6,6 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// Theme holds the output color palette.
 type Theme struct {
 	name     string
 	ok       color.Color
@@ -17,6 +18,7 @@ type Theme struct {
 	spinner  color.Color
 }
 
+// ThemeForBackground returns the theme matching the terminal background.
 func ThemeForBackground(dark bool) Theme {
 	if dark {
 		return DarkTheme()
@@ -24,6 +26,7 @@ func ThemeForBackground(dark bool) Theme {
 	return LightTheme()
 }
 
+// LightTheme returns the palette for light terminal backgrounds.
 func LightTheme() Theme {
 	return Theme{
 		name:     "Catppuccin Latte",
@@ -37,6 +40,7 @@ func LightTheme() Theme {
 	}
 }
 
+// DarkTheme returns the palette for dark terminal backgrounds.
 func DarkTheme() Theme {
 	return Theme{
 		name:     "Catppuccin Frappe",

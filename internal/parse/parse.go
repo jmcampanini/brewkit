@@ -82,26 +82,26 @@ func (f *File) Entries() []*Entry {
 // Parse dispatches to the appropriate parser for the given file kind.
 func Parse(path string, kind profile.Kind) (*File, error) {
 	if kind == profile.KindBrew {
-		return ParseBrewfile(path)
+		return Brewfile(path)
 	}
-	return ParseSimple(path, kind)
+	return Simple(path, kind)
 }
 
 var brewfileEntryRe = regexp.MustCompile(`^\s*brew\s+"([^"]+)"(.*)$`)
 
-// ParseBrewfile parses a Brewfile (Homebrew Bundle subset) file. Only
+// Brewfile parses a Brewfile (Homebrew Bundle subset) file. Only
 // `brew "name"` and `brew "name" # description` lines are recognized as
 // entries; anything else non-comment is reported as LineUnknown for lint.
-func ParseBrewfile(path string) (*File, error) {
+func Brewfile(path string) (*File, error) {
 	return parseFile(path, profile.KindBrew, parseBrewfileLine)
 }
 
-// ParseSimple parses a Tapfile, Headfile, or Caskfile (one entry per line,
+// Simple parses a Tapfile, Headfile, or Caskfile (one entry per line,
 // optional `# description`). Tapfile may carry an optional URL as a second
 // token.
-func ParseSimple(path string, kind profile.Kind) (*File, error) {
+func Simple(path string, kind profile.Kind) (*File, error) {
 	if kind == profile.KindBrew {
-		return nil, fmt.Errorf("ParseSimple cannot parse %s; use ParseBrewfile", kind)
+		return nil, fmt.Errorf("parse.Simple cannot parse %s; use parse.Brewfile", kind)
 	}
 	allowExtra := kind == profile.KindTap
 	return parseFile(path, kind, func(raw string) (LineKind, *Entry) {

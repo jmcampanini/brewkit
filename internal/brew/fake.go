@@ -31,6 +31,7 @@ type Fake struct {
 // string type means test assertions can't silently mismatch on typos.
 type FakeOp string
 
+// One FakeOp per mutating Brewer method.
 const (
 	OpTap           FakeOp = "tap"
 	OpBrewInstall   FakeOp = "brew-install"
@@ -69,6 +70,7 @@ func (f *Fake) record(op FakeOp, name, arg string) {
 	f.Calls = append(f.Calls, FakeCall{Op: op, Name: name, Arg: arg})
 }
 
+// State returns a copy of the fake's in-memory snapshot.
 func (f *Fake) State(_ context.Context) (*State, error) {
 	out := EmptyState()
 	for k, v := range f.TapsSet {
@@ -83,6 +85,7 @@ func (f *Fake) State(_ context.Context) (*State, error) {
 	return out, nil
 }
 
+// Tap records the call and marks the tap as registered.
 func (f *Fake) Tap(_ context.Context, name, url string) (Result, error) {
 	f.record(OpTap, name, url)
 	if f.shouldFail(OpTap, name) {
@@ -92,6 +95,7 @@ func (f *Fake) Tap(_ context.Context, name, url string) (Result, error) {
 	return Result{To: name}, nil
 }
 
+// BrewInstall records the call and marks the formula installed.
 func (f *Fake) BrewInstall(_ context.Context, name string) (Result, error) {
 	f.record(OpBrewInstall, name, "")
 	if f.shouldFail(OpBrewInstall, name) {
@@ -101,6 +105,7 @@ func (f *Fake) BrewInstall(_ context.Context, name string) (Result, error) {
 	return Result{To: name}, nil
 }
 
+// BrewUpgrade records the call and moves the formula to its OutdatedTo version.
 func (f *Fake) BrewUpgrade(_ context.Context, name string) (Result, error) {
 	f.record(OpBrewUpgrade, name, "")
 	if f.shouldFail(OpBrewUpgrade, name) {
@@ -112,6 +117,7 @@ func (f *Fake) BrewUpgrade(_ context.Context, name string) (Result, error) {
 	return Result{From: prev.Version, To: upgraded.Version}, nil
 }
 
+// HeadInstall records the call and installs the configured latest HEAD SHA.
 func (f *Fake) HeadInstall(_ context.Context, name string) (Result, error) {
 	f.record(OpHeadInstall, name, "")
 	if f.shouldFail(OpHeadInstall, name) {
@@ -130,6 +136,7 @@ func (f *Fake) HeadInstall(_ context.Context, name string) (Result, error) {
 	return Result{To: "HEAD-" + sha}, nil
 }
 
+// HeadReinstall records the call and replaces the installed HEAD SHA with the latest.
 func (f *Fake) HeadReinstall(_ context.Context, name string) (Result, error) {
 	f.record(OpHeadReinstall, name, "")
 	if f.shouldFail(OpHeadReinstall, name) {
@@ -149,6 +156,7 @@ func (f *Fake) HeadReinstall(_ context.Context, name string) (Result, error) {
 	return Result{From: "HEAD-" + prev, To: "HEAD-" + sha}, nil
 }
 
+// HeadInstalledSHA reports the fake's installed HEAD SHA, if any.
 func (f *Fake) HeadInstalledSHA(_ context.Context, name string) (string, bool, bool, error) {
 	if sha, ok := f.HeadInstalls[name]; ok && sha != "" {
 		return sha, true, true, nil
@@ -160,6 +168,7 @@ func (f *Fake) HeadInstalledSHA(_ context.Context, name string) (string, bool, b
 	return "", false, false, nil
 }
 
+// HeadLatestSHA reports the fake's configured latest HEAD SHA, if any.
 func (f *Fake) HeadLatestSHA(_ context.Context, name string) (string, bool, error) {
 	if !f.HeadHasURL[name] {
 		// Default: assume head source exists if we know a latest sha.
@@ -174,6 +183,7 @@ func (f *Fake) HeadLatestSHA(_ context.Context, name string) (string, bool, erro
 	return sha, true, nil
 }
 
+// CaskInstall records the call and marks the cask installed.
 func (f *Fake) CaskInstall(_ context.Context, name string) (Result, error) {
 	f.record(OpCaskInstall, name, "")
 	if f.shouldFail(OpCaskInstall, name) {
@@ -183,6 +193,7 @@ func (f *Fake) CaskInstall(_ context.Context, name string) (Result, error) {
 	return Result{To: name}, nil
 }
 
+// CaskUpgrade records the call and moves the cask to its OutdatedTo version.
 func (f *Fake) CaskUpgrade(_ context.Context, name string) (Result, error) {
 	f.record(OpCaskUpgrade, name, "")
 	if f.shouldFail(OpCaskUpgrade, name) {

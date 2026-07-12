@@ -199,11 +199,13 @@ func (e *Exec) Tap(ctx context.Context, name, url string) (Result, error) {
 	return Result{Output: out, To: name}, err
 }
 
+// BrewInstall installs a formula via `brew install --formula`.
 func (e *Exec) BrewInstall(ctx context.Context, name string) (Result, error) {
 	out, err := e.run(ctx, nil, "install", "--formula", name)
 	return Result{Output: out, To: name}, err
 }
 
+// BrewUpgrade upgrades a formula via `brew upgrade --formula`.
 func (e *Exec) BrewUpgrade(ctx context.Context, name string) (Result, error) {
 	out, err := e.run(ctx, nil, "upgrade", "--formula", name)
 	return Result{Output: out, To: name}, err
@@ -217,6 +219,7 @@ var headEnv = []string{
 	"HOMEBREW_NO_AUTO_UPDATE=1",
 }
 
+// HeadInstall installs a formula from its HEAD source.
 func (e *Exec) HeadInstall(ctx context.Context, name string) (Result, error) {
 	out, err := e.run(ctx, headEnv, "install", "--head", "--formula", name)
 	return Result{Output: out, To: name}, err
@@ -277,6 +280,8 @@ func (e *Exec) brewInfoFirst(ctx context.Context, name string) (brewInfoFormula,
 	return wrapper.Formulae[0], nil
 }
 
+// HeadInstalledSHA reads the installed HEAD SHA from `brew info`,
+// preferring the linked keg and falling back to the newest HEAD keg.
 func (e *Exec) HeadInstalledSHA(ctx context.Context, name string) (string, bool, bool, error) {
 	f, err := e.brewInfoFirst(ctx, name)
 	if err != nil {
@@ -308,6 +313,8 @@ func (e *Exec) HeadInstalledSHA(ctx context.Context, name string) (string, bool,
 	return "", false, true, nil
 }
 
+// HeadLatestSHA resolves the newest upstream HEAD commit by refreshing
+// Homebrew's HEAD source cache and reading the cached git repo.
 func (e *Exec) HeadLatestSHA(ctx context.Context, name string) (string, bool, error) {
 	f, err := e.brewInfoFirst(ctx, name)
 	if err != nil {
@@ -376,11 +383,13 @@ func gitSymbolicRef(ctx context.Context, repo, ref string) string {
 	return strings.TrimSpace(buf.String())
 }
 
+// CaskInstall installs a cask via `brew install --cask`.
 func (e *Exec) CaskInstall(ctx context.Context, name string) (Result, error) {
 	out, err := e.run(ctx, nil, "install", "--cask", name)
 	return Result{Output: out, To: name}, err
 }
 
+// CaskUpgrade upgrades a cask via `brew upgrade --cask --greedy`.
 func (e *Exec) CaskUpgrade(ctx context.Context, name string) (Result, error) {
 	out, err := e.run(ctx, nil, "upgrade", "--cask", "--greedy", name)
 	return Result{Output: out, To: name}, err

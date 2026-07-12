@@ -11,6 +11,7 @@ import (
 	"github.com/jmcampanini/brewkit/internal/profile"
 )
 
+// Violation is one lint finding: which file/line broke which rule.
 type Violation struct {
 	Path    string
 	Line    int
@@ -19,6 +20,7 @@ type Violation struct {
 	Raw     string
 }
 
+// Rule pairs a stable rule ID with its check function.
 type Rule struct {
 	ID    string
 	Check func(*parse.File) []Violation

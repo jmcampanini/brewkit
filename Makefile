@@ -4,7 +4,7 @@ BUILD_DIR   := build
 BINARY      := $(BUILD_DIR)/brewkit
 CMD         := ./cmd/brewkit
 PKG         := ./...
-GOFMT_FILES := $(shell git ls-files '*.go')
+GOFMT_FILES := $(shell git ls-files --cached --others --exclude-standard '*.go' | while IFS= read -r file; do [ -f "$$file" ] && printf '%s\n' "$$file"; done)
 
 VERSION := $(shell git describe --tags --dirty --always 2>/dev/null || date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X github.com/jmcampanini/brewkit/internal/cli.Version=$(VERSION)"
@@ -51,5 +51,5 @@ tidy-check: ## Fail if go mod tidy would change go.mod/go.sum.
 check: fmt-check tidy-check lint test ## Run all non-mutating checks.
 
 clean: ## Remove build artifacts, coverage files, and test cache.
-	rm -rf $(BUILD_DIR) dist brewkit coverage.out coverage.html
+	rm -rf $(BUILD_DIR) dist brewkit coverage.out coverage.html *.coverprofile
 	go clean -testcache

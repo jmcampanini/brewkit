@@ -1003,7 +1003,7 @@ func TestRunApply_Head_SHAMoved_RealRun(t *testing.T) {
 // stateFailProbe forces State to return an error.
 type stateFailProbe struct{ *brew.Fake }
 
-func (p *stateFailProbe) State(ctx context.Context) (*brew.State, error) {
+func (p *stateFailProbe) State(_ context.Context) (*brew.State, error) {
 	return nil, fmt.Errorf("brew unavailable")
 }
 

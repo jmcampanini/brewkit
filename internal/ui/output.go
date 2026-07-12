@@ -14,16 +14,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// Level controls output verbosity.
 type Level int
 
+// Verbosity levels, from default to most detailed.
 const (
 	LevelNormal Level = iota
 	LevelQuiet
 	LevelVerbose
 )
 
+// Symbol classifies a per-item line and drives the glyph, color, and
+// summary counter used for it.
 type Symbol int
 
+// The per-item outcome symbols.
 const (
 	SymUpToDate Symbol = iota
 	SymAdded
@@ -41,6 +46,7 @@ const (
 	spinnerClearSequence = "\r\033[2K"
 )
 
+// Summary accumulates per-item outcomes for the final summary line.
 type Summary struct {
 	Added    int
 	Upgraded int
@@ -62,6 +68,7 @@ type PrinterOptions struct {
 	SpinnerWidth  int
 }
 
+// Printer streams per-item output lines and tracks the running Summary.
 type Printer struct {
 	out           io.Writer
 	err           io.Writer
@@ -78,6 +85,7 @@ type Printer struct {
 	bodyWritten   bool // any non-summary line was written
 }
 
+// New builds a Printer that writes items to out and errors to errOut.
 func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 	spinner := opts.Spinner
 	spinnerWidth := opts.SpinnerWidth
@@ -108,6 +116,7 @@ func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 	}
 }
 
+// Item prints one per-item line and bumps the matching summary counter.
 func (p *Printer) Item(sym Symbol, name, detail string) {
 	switch sym {
 	case SymUpToDate:
@@ -300,6 +309,7 @@ func (p *Printer) Footer() {
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))
 }
 
+// RestartAppsNotice prints the "restart these apps" block after cask upgrades.
 func (p *Printer) RestartAppsNotice(names []string) {
 	if len(names) == 0 || p.level == LevelQuiet {
 		return

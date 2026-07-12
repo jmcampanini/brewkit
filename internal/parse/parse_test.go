@@ -8,8 +8,8 @@ import (
 	"github.com/jmcampanini/brewkit/internal/profile"
 )
 
-func TestParseBrewfile_CommonFixture(t *testing.T) {
-	f, err := ParseBrewfile(filepath.Join("testdata", "Brewfile.common"))
+func TestBrewfile_CommonFixture(t *testing.T) {
+	f, err := Brewfile(filepath.Join("testdata", "Brewfile.common"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,8 +32,8 @@ func TestParseBrewfile_CommonFixture(t *testing.T) {
 	}
 }
 
-func TestParseBrewfile_PersonalFixture(t *testing.T) {
-	f, err := ParseBrewfile(filepath.Join("testdata", "Brewfile.personal"))
+func TestBrewfile_PersonalFixture(t *testing.T) {
+	f, err := Brewfile(filepath.Join("testdata", "Brewfile.personal"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,8 @@ func TestParseBrewfile_PersonalFixture(t *testing.T) {
 	}
 }
 
-func TestParseSimple_Caskfile(t *testing.T) {
-	f, err := ParseSimple(filepath.Join("testdata", "Caskfile.common"), profile.KindCask)
+func TestSimple_Caskfile(t *testing.T) {
+	f, err := Simple(filepath.Join("testdata", "Caskfile.common"), profile.KindCask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +58,8 @@ func TestParseSimple_Caskfile(t *testing.T) {
 	}
 }
 
-func TestParseSimple_Headfile(t *testing.T) {
-	f, err := ParseSimple(filepath.Join("testdata", "Headfile.common"), profile.KindHead)
+func TestSimple_Headfile(t *testing.T) {
+	f, err := Simple(filepath.Join("testdata", "Headfile.common"), profile.KindHead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,8 +80,8 @@ func TestParseSimple_Headfile(t *testing.T) {
 	}
 }
 
-func TestParseSimple_Tapfile(t *testing.T) {
-	f, err := ParseSimple(filepath.Join("testdata", "Tapfile.common"), profile.KindTap)
+func TestSimple_Tapfile(t *testing.T) {
+	f, err := Simple(filepath.Join("testdata", "Tapfile.common"), profile.KindTap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,13 +96,13 @@ func TestParseSimple_Tapfile(t *testing.T) {
 	}
 }
 
-func TestParseSimple_RejectsBrewfile(t *testing.T) {
-	if _, err := ParseSimple("testdata/Brewfile.common", profile.KindBrew); err == nil {
-		t.Error("ParseSimple should reject KindBrew")
+func TestSimple_RejectsBrewfile(t *testing.T) {
+	if _, err := Simple("testdata/Brewfile.common", profile.KindBrew); err == nil {
+		t.Error("Simple should reject KindBrew")
 	}
 }
 
-func TestParseBrewfile_InlineFixtures(t *testing.T) {
+func TestBrewfile_InlineFixtures(t *testing.T) {
 	cases := []struct {
 		name       string
 		raw        string
@@ -167,7 +167,7 @@ func TestParseBrewfile_InlineFixtures(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.raw+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			f, err := ParseBrewfile(path)
+			f, err := Brewfile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -196,7 +196,7 @@ func TestParseBrewfile_InlineFixtures(t *testing.T) {
 	}
 }
 
-func TestParseSimple_InlineFixtures(t *testing.T) {
+func TestSimple_InlineFixtures(t *testing.T) {
 	cases := []struct {
 		name      string
 		raw       string
@@ -266,7 +266,7 @@ func TestParseSimple_InlineFixtures(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.raw+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			f, err := ParseSimple(path, tc.kind)
+			f, err := Simple(path, tc.kind)
 			if err != nil {
 				t.Fatal(err)
 			}

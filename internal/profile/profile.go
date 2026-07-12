@@ -18,8 +18,11 @@ import (
 // auto-appended whenever any *file.local exists in the configured dir.
 const LocalName = "local"
 
+// Kind identifies one of the profile file types brewkit manages.
 type Kind int
 
+// The four profile file kinds, in declaration order only; use AllKinds
+// for processing order.
 const (
 	KindTap Kind = iota
 	KindBrew
@@ -45,6 +48,7 @@ func (k Kind) String() string {
 	return "unknown"
 }
 
+// FilenamePrefix returns the file name prefix for the kind, e.g. "Tapfile".
 func (k Kind) FilenamePrefix() string {
 	switch k {
 	case KindTap:
@@ -59,10 +63,12 @@ func (k Kind) FilenamePrefix() string {
 	return ""
 }
 
+// FilenameFor returns the file name for a kind/profile pair, e.g. "Tapfile.common".
 func FilenameFor(k Kind, profile string) string {
 	return k.FilenamePrefix() + "." + profile
 }
 
+// PathFor returns the full path of a kind/profile file inside dir.
 func PathFor(dir string, k Kind, profile string) string {
 	return filepath.Join(dir, FilenameFor(k, profile))
 }

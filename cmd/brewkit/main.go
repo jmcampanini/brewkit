@@ -1,3 +1,5 @@
+// Command brewkit manages Homebrew taps, formulas, HEAD formulas, and casks
+// across layered profile files.
 package main
 
 import (
