@@ -1,6 +1,7 @@
 class Brewkit < Formula
   desc "Manage Homebrew packages across layered profiles"
   homepage "https://github.com/jmcampanini/brewkit"
+  license "MIT"
   head "https://github.com/jmcampanini/brewkit.git", branch: "main"
 
   depends_on "go" => :build
