@@ -54,7 +54,6 @@ func TestPrinter_NormalStream(t *testing.T) {
 	want := "✓ git (2.45.0)\n" +
 		"↑ neovim 0.10.0 → 0.10.2\n" +
 		"+ ripgrep\n" +
-		"\n" +
 		"Summary: 1 added, 1 upgraded, 1 up-to-date\n"
 	if got != want {
 		t.Errorf("unexpected output:\nwant:\n%q\ngot:\n%q", want, got)
@@ -69,7 +68,7 @@ func TestPrinter_HideUnchangedSuppressesOnlyUpToDate(t *testing.T) {
 	p.Footer()
 
 	got := out.String()
-	want := "+ ripgrep\n\nSummary: 1 added, 1 up-to-date\n"
+	want := "+ ripgrep\nSummary: 1 added, 1 up-to-date\n"
 	if got != want {
 		t.Errorf("unexpected hide-unchanged output:\nwant: %q\ngot:  %q", want, got)
 	}
@@ -84,7 +83,6 @@ func TestPrinter_OutputPrefixPrefixesDurableLines(t *testing.T) {
 	p.Footer()
 
 	wantOut := "  + ripgrep\n" +
-		"  \n" +
 		"  Summary: 1 added, 1 failed\n"
 	if got := out.String(); got != wantOut {
 		t.Errorf("unexpected prefixed stdout:\nwant: %q\ngot:  %q", wantOut, got)
@@ -134,7 +132,6 @@ func TestPrinter_VerboseAddsRawOutput(t *testing.T) {
 	want := "+ ripgrep\n" +
 		"    ==> Downloading...\n" +
 		"    ==> Pouring ripgrep.bottle...\n" +
-		"\n" +
 		"Summary: 1 added\n"
 	if got != want {
 		t.Errorf("unexpected verbose output:\nwant: %q\ngot:  %q", want, got)
@@ -374,7 +371,7 @@ func TestPrinter_Notice(t *testing.T) {
 	p.Footer()
 
 	got := out.String()
-	want := "⊘ work: no Headfile, skipping\n\nSummary: 1 skipped\n"
+	want := "⊘ work: no Headfile, skipping\nSummary: 1 skipped\n"
 	if got != want {
 		t.Errorf("unexpected notice output:\nwant: %q\ngot:  %q", want, got)
 	}
@@ -392,12 +389,17 @@ func TestPrinter_DryRunMarker(t *testing.T) {
 
 func TestPrinter_RestartAppsNotice(t *testing.T) {
 	p, out, _ := newTestPrinter(LevelNormal)
+	p.Item(SymUpgraded, "claude", "1.0.0 → 1.1.0")
 	p.RestartAppsNotice([]string{"chatgpt", "claude"})
+	p.Footer()
 
 	got := out.String()
-	want := "⚠ Restart these apps to apply upgrades\n" +
+	want := "↑ claude 1.0.0 → 1.1.0\n" +
+		"\n" +
+		"⚠ Restart these apps to apply upgrades\n" +
 		"  chatgpt\n" +
-		"  claude\n"
+		"  claude\n" +
+		"Summary: 1 upgraded\n"
 	if got != want {
 		t.Errorf("unexpected restart notice:\nwant: %q\ngot:  %q", want, got)
 	}
