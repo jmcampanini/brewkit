@@ -95,8 +95,8 @@ Global flags:
 Output
 ------
 
-Default output streams per-item changes followed by a one-line
-summary. Symbols:
+Default output streams per-item changes immediately followed by a
+one-line summary. Symbols:
 
   +  added (newly installed)
   ↑  upgraded (with old → new where available)

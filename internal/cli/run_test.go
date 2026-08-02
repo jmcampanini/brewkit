@@ -291,7 +291,7 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 		}
 	})
 
-	want := "+ ripgrep (dry-run)\n\nSummary: 1 added\n"
+	want := "+ ripgrep (dry-run)\nSummary: 1 added\n"
 	if out != want {
 		t.Errorf("unexpected dry-run output:\nwant: %q\ngot:  %q", want, out)
 	}
@@ -320,7 +320,7 @@ func TestRunApply_Brew_OutputPrefix(t *testing.T) {
 		}
 	})
 
-	want := "  + ripgrep (dry-run)\n  \n  Summary: 1 added\n"
+	want := "  + ripgrep (dry-run)\n  Summary: 1 added\n"
 	if out != want {
 		t.Errorf("unexpected prefixed dry-run output:\nwant: %q\ngot:  %q", want, out)
 	}
@@ -564,7 +564,7 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 		}
 	})
 
-	want := "⊘ common: no Brewfile, skipping\n\nSummary: 1 skipped\n"
+	want := "⊘ common: no Brewfile, skipping\nSummary: 1 skipped\n"
 	if out != want {
 		t.Errorf("unexpected missing-file notice:\nwant: %q\ngot:  %q", want, out)
 	}

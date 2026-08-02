@@ -303,9 +303,6 @@ func (p *Printer) Footer() {
 	if len(parts) == 0 {
 		parts = append(parts, "nothing to do")
 	}
-	if p.bodyWritten {
-		_, _ = fmt.Fprintln(p.out)
-	}
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))
 }
 
