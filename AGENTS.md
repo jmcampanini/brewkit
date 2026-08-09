@@ -1,12 +1,10 @@
 ## Build and validate
 
-Use `make` - do not invoke `go build` / `go test` / `golangci-lint` directly.
-
-Run `make help` for the task list. Key tasks:
-
-- `make build` - compile to `build/brewkit` with version ldflags.
-- `make test` - `go test -race ./...`.
-- `make check` - `fmt-check` + `tidy-check` + `lint` + `test`. **Run this before declaring work done.**
+- Use `make`; do not invoke `go build` / `go test` / `golangci-lint` directly.
+- Run `make help` to discover available tasks. Key tasks:
+  - Run `make build` to compile to `build/brewkit` with version ldflags.
+  - Run `make test` to execute `go test -race ./...`.
+  - Run `make check` to execute `fmt-check` + `tidy-check` + `lint` + `test`. Run this before declaring work done.
 
 ## Conventions
 
@@ -17,4 +15,4 @@ Run `make help` for the task list. Key tasks:
 
 ## Before committing
 
-Always run `make check`. It is the single source of truth for "this is ready".
+- Always run `make check`; it is the single source of truth for "this is ready".
