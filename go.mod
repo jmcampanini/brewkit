@@ -1,6 +1,6 @@
 module github.com/jmcampanini/brewkit
 
-go 1.26.3
+go 1.26.5
 
 require (
 	charm.land/lipgloss/v2 v2.0.5
@@ -26,6 +26,12 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260708182218-49f421fb7959 // indirect
+	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/vuln v1.6.0 // indirect
 )
+
+tool golang.org/x/vuln/cmd/govulncheck
