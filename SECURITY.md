@@ -17,5 +17,3 @@ When possible, include in the private report:
 - the affected revision: the output of `brewkit --version`, or the commit you installed from.
 
 Reports are handled on a best-effort basis. There is no guaranteed response, remediation, or disclosure timeline.
-
-Policy standard: CLI-SEC-006.
