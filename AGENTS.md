@@ -9,7 +9,6 @@
 ## Conventions
 
 - The binary is built to `build/brewkit`, not the repo root. `./build/` is gitignored.
-- Skip comments in `.go` files unless explaining why a non-obvious choice was necessary.
 - Keep `internal/docs/manual.txt` in sync when changing CLI behavior, config files, or user-facing workflows.
 - This CLI shells out to Homebrew; treat config/profile inputs as untrusted and validate paths, command args, and parser behavior defensively.
 
