@@ -57,7 +57,7 @@ type Brewer interface {
 	// HeadReinstall removes the current HEAD install and reinstalls from
 	// HEAD when the installed HEAD SHA has moved. If the uninstall step
 	// succeeds and the install step fails, the formula is left MISSING
-	// from the system — implementations must make that clear in the
+	// from the system - implementations must make that clear in the
 	// returned error.
 	HeadReinstall(ctx context.Context, name string) (Result, error)
 	// HeadInstalledSHA returns the short SHA of the installed HEAD build.

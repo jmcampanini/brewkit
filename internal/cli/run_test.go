@@ -242,7 +242,7 @@ func TestRunApply_ConfigOmittedDir_ResolvesAgainstProcessCWD(t *testing.T) {
 	})
 
 	if !strings.Contains(out, "+ git") {
-		t.Errorf("expected '+ git' in output — profile files must be discovered under process CWD:\n%s", out)
+		t.Errorf("expected '+ git' in output - profile files must be discovered under process CWD:\n%s", out)
 	}
 }
 
@@ -1168,7 +1168,7 @@ func TestRunApply_DryRun_LayeredProfilesProjectsState(t *testing.T) {
 		t.Errorf("expected first 'ripgrep' to be added:\n%s", out)
 	}
 	if !strings.Contains(out, "Summary: 1 added, 1 up-to-date") {
-		t.Errorf("layered dry-run should project install — second occurrence should be up-to-date:\n%s", out)
+		t.Errorf("layered dry-run should project install - second occurrence should be up-to-date:\n%s", out)
 	}
 }
 
@@ -1179,7 +1179,7 @@ func TestRunApply_DryRun_LayeredProfilesProjectsState(t *testing.T) {
 // brew.Fake.BrewInstall records into Calls *before* checking shouldFail
 // (see internal/brew/fake.go), so a normal Fake failure still appears
 // in the ledger. Because this wrapper short-circuits *before* delegating
-// to f.Fake.BrewInstall, it must mirror that recording itself — keep
+// to f.Fake.BrewInstall, it must mirror that recording itself - keep
 // the FakeCall shape in sync with brew.Fake.record if that ever grows
 // new fields.
 type sentinelFailFake struct {
@@ -1230,10 +1230,10 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 		t.Fatal("expected aggregated error")
 	}
 	if !errors.Is(runErr, errAlpha) {
-		t.Errorf("errors.Is(err, errAlpha) = false — errors.Join contract broken: %v", runErr)
+		t.Errorf("errors.Is(err, errAlpha) = false - errors.Join contract broken: %v", runErr)
 	}
 	if !errors.Is(runErr, errBravo) {
-		t.Errorf("errors.Is(err, errBravo) = false — errors.Join contract broken: %v", runErr)
+		t.Errorf("errors.Is(err, errBravo) = false - errors.Join contract broken: %v", runErr)
 	}
 	if !strings.Contains(runErr.Error(), "2 brew operation(s) failed") {
 		t.Errorf("expected prefix '2 brew operation(s) failed' in: %v", runErr)

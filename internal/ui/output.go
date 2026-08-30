@@ -147,7 +147,7 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 }
 
 // Notice is used for missing-file messages like "⊘ work: no Headfile,
-// skipping" — informational, not an error, but counted as a skip.
+// skipping" - informational, not an error, but counted as a skip.
 func (p *Printer) Notice(msg string) {
 	p.summary.Skipped++
 	if p.level == LevelQuiet {

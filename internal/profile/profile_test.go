@@ -210,7 +210,7 @@ func TestDiscover_RejectsBackupAndSwapFiles(t *testing.T) {
 		t.Fatalf("Discover err: %v", err)
 	}
 	if !reflect.DeepEqual(got, []string{"common"}) {
-		t.Errorf("got %v, want [common] only — backup/swap/empty suffixes should be rejected", got)
+		t.Errorf("got %v, want [common] only - backup/swap/empty suffixes should be rejected", got)
 	}
 }
 

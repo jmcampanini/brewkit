@@ -26,7 +26,7 @@ type Rule struct {
 	Check func(*parse.File) []Violation
 }
 
-// AllRules is the canonical ordered list. Rule IDs are stable — they
+// AllRules is the canonical ordered list. Rule IDs are stable - they
 // are surfaced in `brewkit lint` output and in test assertions.
 var AllRules = []Rule{
 	{ID: "sort-order", Check: ruleSortOrder},
