@@ -1,4 +1,4 @@
-brewkit — multi-profile Homebrew manager
+brewkit - multi-profile Homebrew manager
 ========================================
 
 brewkit manages four file types per profile:
@@ -140,7 +140,7 @@ Every file supports `# comment` lines, blank lines, and inline
 trailing `# description` comments. Files are read regardless of
 sort order; alphabetical sorting is enforced by `brewkit lint`.
 
-Brewfile.<profile> — Homebrew Bundle subset.
+Brewfile.<profile> - Homebrew Bundle subset.
   brew "name"
   brew "name"            # description
   brew "user/tap/name"   # description for fully qualified entries

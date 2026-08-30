@@ -167,7 +167,7 @@ func (e *Exec) fillOutdatedFormulas(ctx context.Context, state *State) error {
 func (e *Exec) fillOutdatedCasks(ctx context.Context, state *State) error {
 	// --greedy is the detection-side companion to CaskUpgrade's --greedy:
 	// it opts into casks that brew would otherwise ignore for outdated
-	// checks — those with `auto_updates true` or `version :latest` in
+	// checks - those with `auto_updates true` or `version :latest` in
 	// the cask DSL. Without it those casks would silently never upgrade.
 	out, err := e.runQuiet(ctx, "outdated", "--cask", "--greedy", "--json=v2")
 	if err != nil {
@@ -227,7 +227,7 @@ func (e *Exec) HeadInstall(ctx context.Context, name string) (Result, error) {
 
 // HeadReinstall is deliberately uninstall-then-install rather than
 // `brew reinstall --head` because `brew reinstall` does not always pick
-// up a moved HEAD source SHA — it keeps the cached keg when the version
+// up a moved HEAD source SHA - it keeps the cached keg when the version
 // string matches. The explicit uninstall forces a fresh source tree.
 //
 // If the uninstall succeeds and the install fails, the caller is left

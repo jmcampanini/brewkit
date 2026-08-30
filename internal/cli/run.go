@@ -119,7 +119,7 @@ func runApply(ctx context.Context, t profile.Kind, args []string) error {
 			return err
 		}
 		// Surface LineUnknown lines as failures rather than silently
-		// skipping them — `f.Entries()` filters to LineEntry only, so a
+		// skipping them - `f.Entries()` filters to LineEntry only, so a
 		// malformed line would otherwise produce a clean exit and a
 		// partially applied profile.
 		for _, l := range f.Lines {
@@ -225,8 +225,8 @@ type runContext struct {
 // The two things this laziness enables:
 //  1. `brewkit head` never invokes State at all (applyHead uses only
 //     per-formula probes and skips the ensureState call).
-//  2. A run that finds no matching profile files — runApply stats each
-//     path and `continue`s on ENOENT before ever entering apply* — can
+//  2. A run that finds no matching profile files - runApply stats each
+//     path and `continue`s on ENOENT before ever entering apply* - can
 //     complete without shelling out to brew, which matters on machines
 //     where brew is unavailable or transiently broken.
 func (rc *runContext) ensureState() error {
@@ -340,7 +340,7 @@ func (rc *runContext) applyBrew(e *parse.Entry) error {
 	return nil
 }
 
-// applyHead does NOT call ensureState — HEAD operations are entirely
+// applyHead does NOT call ensureState - HEAD operations are entirely
 // per-formula (HeadInstalledSHA / HeadLatestSHA), so the bulk
 // `brew tap`/`brew list`/`brew outdated` probes from State are wasted
 // work and would also abort the run if any unrelated probe (e.g. a

@@ -130,7 +130,7 @@ func HasLocalFiles(dir string) (bool, error) {
 // the reserved "local" name when present. brewkit lint uses this to
 // scan every file regardless of which profiles are currently active.
 //
-// A file matches a profile only when its suffix is a "clean" name —
+// A file matches a profile only when its suffix is a "clean" name -
 // alphanumerics, underscores, and hyphens. This rejects editor swap
 // files (Brewfile.foo.swp), backups (Brewfile.foo.bak, Brewfile.foo~),
 // and similar leftovers from being silently treated as profiles.
