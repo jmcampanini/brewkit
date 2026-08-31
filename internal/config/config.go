@@ -30,7 +30,7 @@ type Config struct {
 
 	// Profiles is the raw active profile list. It may be overridden by
 	// BREWKIT_PROFILES, by --profiles, or by repeated --profile flags.
-	Profiles []string `toml:"profiles" config:"profiles" pflag_singular:"profile" help:"active profiles; --profiles accepts comma-separated lists; overrides file/env profiles"`
+	Profiles []string `toml:"profiles" config:"profiles" pflag_singular:"profile" help:"active profiles; overrides brewkit.toml and env"`
 
 	// EnvProfiles names an additional environment variable whose comma-separated
 	// values append to Profiles during runtime derivation.
