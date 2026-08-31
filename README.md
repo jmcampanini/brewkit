@@ -1,21 +1,27 @@
 # brewkit
 
-`brewkit` manages Homebrew taps, formulas, HEAD formulas, and casks across layered profile files.
+brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-profile files. A profile is a name such as `work` or `personal`; its `Tapfile.<profile>`, `Brewfile.<profile>`, `Headfile.<profile>`, and `Caskfile.<profile>` list what that profile needs, several profiles can be active at once, and `brewkit lint` keeps the files sorted and commented consistently. brewkit never removes a tap, formula, or cask that is not listed.
+
+Command help is the canonical reference: `brewkit --help` and each command's `--help` describe every user-facing contract, `brewkit config --help` describes configuration precedence and the `brewkit.toml` keys, and `brewkit help exit-codes` describes exit statuses. `brewkit docs` prints the longer manual.
 
 ## Install
+
+brewkit distributes from HEAD only; there is no release channel or tagged binary.
+
+### Homebrew
 
 ```sh
 brew tap jmcampanini/brewkit https://github.com/jmcampanini/brewkit
 brew install --HEAD jmcampanini/brewkit/brewkit
 ```
 
-To update a HEAD install:
+Upgrade to the latest commit:
 
 ```sh
 brew upgrade --fetch-HEAD brewkit
 ```
 
-For a source/dev build:
+### From source
 
 ```sh
 git clone https://github.com/jmcampanini/brewkit
@@ -24,9 +30,27 @@ make build
 ./build/brewkit --version
 ```
 
-## Quick start
+## Representative commands
 
-Create `brewkit.toml` and one or more profile files:
+| Command | Result |
+|---|---|
+| `brewkit lint` | Check every profile file's sort order and comment style; exit 1 on violations. |
+| `brewkit tap` | Register the taps listed for the active profiles. |
+| `brewkit brew [--dry-run]` | Install or upgrade the listed formulas; `--dry-run` prints the plan instead. |
+| `brewkit head` | Install the listed HEAD formulas and rebuild those whose upstream commit moved. |
+| `brewkit cask` | Install or upgrade the listed casks, including ones that auto-update. |
+| `brewkit brew ripgrep` | Apply only the listed entry named `ripgrep`. |
+| `brewkit config` | Print the configuration in effect with the source of each value. |
+
+A full run is `brewkit lint`, then `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` in that order. Selecting profiles for one run looks like `brewkit --profiles work,personal brew` or `BREWKIT_PROFILES=work brewkit cask`.
+
+## Required external programs
+
+Homebrew's `brew` must be on `PATH` for `tap`, `brew`, `head`, and `cask`; `head` also needs `git`. `lint`, `config`, and `docs` run on their own.
+
+## Configuration
+
+brewkit reads `brewkit.toml` from the current directory when it exists (`--config PATH` names another file) and looks for profile files in the directory its `dir` key names, `.` by default, relative to the current directory. There is no implicit profile: set `profiles` in `brewkit.toml`, or pass `--profiles work,personal`, `--profile work`, or `BREWKIT_PROFILES=work`. A `Brewfile.local` (or any other `*file.local`) adds a `local` profile automatically for machine-specific entries. `brewkit config --help` documents the precedence and every key, and `brewkit config` prints the values in effect.
 
 ```toml
 # brewkit.toml
@@ -48,25 +72,3 @@ direnv  # shell environment loader
 # Tapfile.common
 jmcampanini/overlay https://github.com/jmcampanini/overlay
 ```
-
-Then run:
-
-```sh
-brewkit lint
-brewkit tap
-brewkit brew
-brewkit head
-brewkit cask
-```
-
-There is no implicit `common` profile; set `profiles` in `brewkit.toml`, use `BREWKIT_PROFILES=work,personal`, pass `--profiles work,personal`, or repeat `--profile work --profile personal`.
-
-Use `--hide-unchanged` with `tap`, `brew`, `head`, or `cask` to hide already-satisfied per-item lines while keeping the final summary accurate.
-
-Use `--output-prefix TEXT` to prefix output emitted by brewkit commands, including durable command output, errors, and transient progress frames. Help and version output are intentionally not prefixed.
-
-Interactive output automatically selects Catppuccin Latte on light terminal backgrounds and Catppuccin Frappe on dark backgrounds. Spinner glyphs use the palette's teal accent while progress messages use its secondary text. Colors are downsampled to the terminal's capability, and any nonempty `NO_COLOR` disables them. Transient progress messages use three ASCII periods (`...`).
-
-Use `-q, --quiet` for errors-only operational runs; successful quiet `tap`, `brew`, `head`, `cask`, and `lint` commands are silent, while `lint -q` still prints violations. `--quiet` and `--verbose` cannot be combined.
-
-Run `brewkit docs` for the full file format and config reference.
