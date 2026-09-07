@@ -3,8 +3,8 @@
 - Use `make`; do not invoke `go build` / `go test` / `golangci-lint` directly.
 - Run `make help` to discover available tasks. Key tasks:
   - Run `make build` to compile to `build/brewkit` with version ldflags.
-  - Run `make test` to execute `go test -race ./...`.
-  - Run `make check` to execute `fmt-check` + `tidy-check` + `lint` + `test`. Run this before declaring work done.
+  - Run `make test` to execute `go test -count=1 -race ./...`.
+  - Run `make check` to verify formatting, module tidiness, lint, uncached race tests, the production build, version output, and vulnerabilities. Run this before declaring work done.
 
 ## Conventions
 
