@@ -32,6 +32,7 @@ type Symbol int
 const (
 	SymUpToDate Symbol = iota
 	SymAdded
+	SymTrusted
 	SymUpgraded
 	SymError
 	SymNotice
@@ -49,6 +50,7 @@ const (
 // Summary accumulates per-item outcomes for the final summary line.
 type Summary struct {
 	Added    int
+	Trusted  int
 	Upgraded int
 	UpToDate int
 	Errors   int
@@ -123,6 +125,8 @@ func (p *Printer) Item(sym Symbol, name, detail string) {
 		p.summary.UpToDate++
 	case SymAdded:
 		p.summary.Added++
+	case SymTrusted:
+		p.summary.Trusted++
 	case SymUpgraded:
 		p.summary.Upgraded++
 	case SymError:
@@ -291,6 +295,9 @@ func (p *Printer) Footer() {
 	if p.summary.Upgraded > 0 {
 		parts = append(parts, fmt.Sprintf("%d upgraded", p.summary.Upgraded))
 	}
+	if p.summary.Trusted > 0 {
+		parts = append(parts, fmt.Sprintf("%d trusted", p.summary.Trusted))
+	}
 	if p.summary.UpToDate > 0 {
 		parts = append(parts, fmt.Sprintf("%d up-to-date", p.summary.UpToDate))
 	}
@@ -324,7 +331,7 @@ func symbolText(sym Symbol) string {
 	switch sym {
 	case SymUpToDate:
 		return "✓"
-	case SymAdded:
+	case SymAdded, SymTrusted:
 		return "+"
 	case SymUpgraded:
 		return "↑"
@@ -370,7 +377,7 @@ func (s *printerStyles) symbol(sym Symbol) string {
 	switch sym {
 	case SymUpToDate:
 		return s.ok.Render(plain)
-	case SymAdded:
+	case SymAdded, SymTrusted:
 		return s.added.Render(plain)
 	case SymUpgraded:
 		return s.upgraded.Render(plain)

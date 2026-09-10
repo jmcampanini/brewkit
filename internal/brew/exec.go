@@ -12,7 +12,7 @@ import (
 
 // Exec is the production Brewer that shells out to the `brew` binary.
 //
-// Mutating action methods (Tap / BrewInstall / BrewUpgrade /
+// Mutating action methods (Tap / TrustTap / BrewInstall / BrewUpgrade /
 // HeadInstall / HeadReinstall / CaskInstall / CaskUpgrade) capture
 // combined stdout+stderr in Result.Output so the caller can render
 // full failure context regardless of verbosity. Read-only state probes
@@ -59,24 +59,12 @@ func (e *Exec) runQuiet(ctx context.Context, args ...string) (string, error) {
 	return buf.String(), nil
 }
 
-// State issues five separate `brew` subprocess probes (tap list,
-// formula list, cask list, outdated formulas, outdated casks) and is
+// State issues four separate `brew` subprocess probes (formula list,
+// cask list, outdated formulas, outdated casks) and is
 // the heavyweight call that runContext.ensureState gates behind a lazy
 // check so kinds with no matching files don't shell out at all.
 func (e *Exec) State(ctx context.Context) (*State, error) {
 	state := EmptyState()
-
-	// Tapped repositories.
-	tapsOut, err := e.runQuiet(ctx, "tap")
-	if err != nil {
-		return nil, fmt.Errorf("brew tap: %w", err)
-	}
-	for _, line := range strings.Split(tapsOut, "\n") {
-		t := strings.TrimSpace(line)
-		if t != "" {
-			state.Taps[t] = true
-		}
-	}
 
 	// Installed formulas with versions.
 	if err := e.fillInstalled(ctx, state); err != nil {
@@ -189,13 +177,50 @@ func (e *Exec) fillOutdatedCasks(ctx context.Context, state *State) error {
 	return nil
 }
 
+// TapState queries installed taps and their effective whole-tap trust.
+func (e *Exec) TapState(ctx context.Context) (map[string]bool, error) {
+	out, err := e.runQuiet(ctx, "tap-info", "--installed", "--json=v1")
+	if err != nil {
+		return nil, err
+	}
+
+	var taps []struct {
+		Name      string `json:"name"`
+		Installed *bool  `json:"installed"`
+		Trusted   *bool  `json:"trusted"`
+	}
+	if err := json.Unmarshal([]byte(out), &taps); err != nil {
+		return nil, fmt.Errorf("parse tap info json (update Homebrew with 'brew update'): %w", err)
+	}
+	if taps == nil {
+		return nil, errors.New("tap info json must be an array; update Homebrew with 'brew update'")
+	}
+
+	state := make(map[string]bool, len(taps))
+	for _, tap := range taps {
+		if strings.TrimSpace(tap.Name) == "" || tap.Installed == nil || tap.Trusted == nil {
+			return nil, fmt.Errorf("tap info for %q lacks name, installed, or trusted; update Homebrew with 'brew update'", tap.Name)
+		}
+		if *tap.Installed {
+			state[tap.Name] = *tap.Trusted
+		}
+	}
+	return state, nil
+}
+
 // Tap registers a tap. brew tap is idempotent at the brew layer.
 func (e *Exec) Tap(ctx context.Context, name, url string) (Result, error) {
-	args := []string{"tap", name}
+	args := []string{"tap", "--", name}
 	if url != "" {
 		args = append(args, url)
 	}
 	out, err := e.run(ctx, nil, args...)
+	return Result{Output: out, To: name}, err
+}
+
+// TrustTap lets Homebrew resolve the installed tap's remote and persist trust.
+func (e *Exec) TrustTap(ctx context.Context, name string) (Result, error) {
+	out, err := e.run(ctx, nil, "trust", "--tap", "--", name)
 	return Result{Output: out, To: name}, err
 }
 

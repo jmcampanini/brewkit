@@ -23,7 +23,7 @@ Tapfile.local, Brewfile.local, Headfile.local, or Caskfile.local exists
 in dir. 'brewkit config' prints the resulting effective_profiles.`
 
 const brewStateHelp = `Before the first entry that needs it, brewkit reads Homebrew's state once
-with 'brew tap', 'brew list --formula --versions', 'brew list --cask
+with 'brew list --formula --versions', 'brew list --cask
 --versions', 'brew outdated --formula --json=v2', and 'brew outdated
 --cask --greedy --json=v2'. A failing query is an error ('brew state:
 ...') for the entry that needed it.`
@@ -35,13 +35,14 @@ applied and the command fails. Without an operand every entry is applied,
 and a profile that has no file of this kind is reported as skipped.`
 
 const applyOutputHelp = `Profiles are processed in order and entries in file order. Each entry
-prints one line on stdout: '+ name' for an install or tap, '↑ name old →
-new' for an upgrade, '✓ name' when already satisfied, and '⊘ profile: no
-Brewfile, skipping' (or Tapfile, Headfile, Caskfile) when a profile has no
-file of this kind. A failure prints '✗ name: reason' on stderr followed by
+prints one line on stdout: '+ name' for an install, tap, or trust change,
+'↑ name old → new' for an upgrade, and '✓ name' when already satisfied.
+A profile with no file of this kind prints '⊘ profile: no Brewfile,
+skipping' (or Tapfile, Headfile, Caskfile).
+A failure prints '✗ name: reason' on stderr followed by
 brew's captured output, whatever the verbosity, and a line that is not a
 valid entry for the file kind is a failure. A final 'Summary: ...' line
-on stdout counts added, upgraded, up-to-date, skipped, and failed
+on stdout counts added, upgraded, trusted, up-to-date, skipped, and failed
 entries. --hide-unchanged omits the ✓ lines; the summary still counts
 them. --verbose adds brew's output, indented, under each changed entry.
 --quiet prints only the ✗ lines and their brew output, so a successful

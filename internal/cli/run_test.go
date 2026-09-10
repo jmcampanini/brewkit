@@ -478,6 +478,7 @@ func TestRunApply_Tap_HideUnchanged(t *testing.T) {
 
 	fake := brew.NewFake()
 	fake.TapsSet["homebrew/core"] = true
+	fake.TrustedTaps["homebrew/core"] = true
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {

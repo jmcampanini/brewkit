@@ -47,6 +47,22 @@ func (b *progressBrewer) State(ctx context.Context) (*brew.State, error) {
 	return state, err
 }
 
+func (b *progressBrewer) TapState(ctx context.Context) (map[string]bool, error) {
+	var state map[string]bool
+	err := b.withSpinner("Checking Homebrew taps and trust...", func() error {
+		var opErr error
+		state, opErr = b.next.TapState(ctx)
+		return opErr
+	})
+	return state, err
+}
+
+func (b *progressBrewer) TrustTap(ctx context.Context, name string) (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Trusting %s...", name), func() (brew.Result, error) {
+		return b.next.TrustTap(ctx, name)
+	})
+}
+
 func (b *progressBrewer) Tap(ctx context.Context, name, url string) (brew.Result, error) {
 	return b.withResult(fmt.Sprintf("Tapping %s...", name), func() (brew.Result, error) {
 		return b.next.Tap(ctx, name, url)

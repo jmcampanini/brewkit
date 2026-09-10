@@ -12,6 +12,7 @@ brewkit distributes from HEAD only; there is no release channel or tagged binary
 
 ```sh
 brew tap jmcampanini/brewkit https://github.com/jmcampanini/brewkit
+brew trust --tap jmcampanini/brewkit
 brew install --HEAD jmcampanini/brewkit/brewkit
 ```
 
@@ -35,7 +36,7 @@ make build
 | Command | Result |
 |---|---|
 | `brewkit lint` | Check every profile file's sort order and comment style; exit 1 on violations. |
-| `brewkit tap` | Register the taps listed for the active profiles. |
+| `brewkit tap` | Register and trust the whole taps listed for the active profiles. |
 | `brewkit brew [--dry-run]` | Install or upgrade the listed formulas; `--dry-run` prints the plan instead. |
 | `brewkit head` | Install the listed HEAD formulas and rebuild those whose upstream commit moved. |
 | `brewkit cask` | Install or upgrade the listed casks, including ones that auto-update. |
@@ -47,6 +48,8 @@ A full run is `brewkit lint`, then `brewkit tap`, `brewkit brew`, `brewkit head`
 ## Required external programs
 
 Homebrew's `brew` must be on `PATH` for `tap`, `brew`, `head`, and `cask`; `head` also needs `git`. `lint`, `config`, and `docs` run on their own.
+
+`tap` requires Homebrew with `brew trust --tap` and trust status in `brew tap-info --installed --json=v1`. Run `brew update` to obtain current support. Listing a tap authorizes its formulae, casks, and commands. Removing the entry never revokes trust or untaps it.
 
 ## Configuration
 

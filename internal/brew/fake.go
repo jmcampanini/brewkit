@@ -13,6 +13,7 @@ import (
 type Fake struct {
 	// Initial / current state.
 	TapsSet      map[string]bool
+	TrustedTaps  map[string]bool
 	FormulasMap  map[string]FormulaState
 	CasksMap     map[string]CaskState
 	HeadInstalls map[string]string // formula → installed SHA (empty if none)
@@ -34,6 +35,7 @@ type FakeOp string
 // One FakeOp per mutating Brewer method.
 const (
 	OpTap           FakeOp = "tap"
+	OpTrustTap      FakeOp = "trust-tap"
 	OpBrewInstall   FakeOp = "brew-install"
 	OpBrewUpgrade   FakeOp = "brew-upgrade"
 	OpHeadInstall   FakeOp = "head-install"
@@ -53,6 +55,7 @@ type FakeCall struct {
 func NewFake() *Fake {
 	return &Fake{
 		TapsSet:      map[string]bool{},
+		TrustedTaps:  map[string]bool{},
 		FormulasMap:  map[string]FormulaState{},
 		CasksMap:     map[string]CaskState{},
 		HeadInstalls: map[string]string{},
@@ -73,9 +76,6 @@ func (f *Fake) record(op FakeOp, name, arg string) {
 // State returns a copy of the fake's in-memory snapshot.
 func (f *Fake) State(_ context.Context) (*State, error) {
 	out := EmptyState()
-	for k, v := range f.TapsSet {
-		out.Taps[k] = v
-	}
 	for k, v := range f.FormulasMap {
 		out.Formulas[k] = v
 	}
@@ -83,6 +83,27 @@ func (f *Fake) State(_ context.Context) (*State, error) {
 		out.Casks[k] = v
 	}
 	return out, nil
+}
+
+// TapState returns a copy of installed taps and their whole-tap trust.
+func (f *Fake) TapState(_ context.Context) (map[string]bool, error) {
+	out := make(map[string]bool)
+	for name, installed := range f.TapsSet {
+		if installed {
+			out[name] = f.TrustedTaps[name]
+		}
+	}
+	return out, nil
+}
+
+// TrustTap records the call and marks the tap as trusted.
+func (f *Fake) TrustTap(_ context.Context, name string) (Result, error) {
+	f.record(OpTrustTap, name, "")
+	if f.shouldFail(OpTrustTap, name) {
+		return Result{}, fmt.Errorf("fake: trust tap %s failed", name)
+	}
+	f.TrustedTaps[name] = true
+	return Result{To: name}, nil
 }
 
 // Tap records the call and marks the tap as registered.

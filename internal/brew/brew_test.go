@@ -8,16 +8,12 @@ import (
 
 func TestFake_State(t *testing.T) {
 	f := NewFake()
-	f.TapsSet["charmbracelet/tap"] = true
 	f.FormulasMap["git"] = FormulaState{Installed: true, Version: "2.45.0"}
 	f.CasksMap["ghostty"] = CaskState{Installed: true, Version: "1.0.0"}
 
 	st, err := f.State(context.Background())
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !st.Taps["charmbracelet/tap"] {
-		t.Error("missing tap")
 	}
 	if !st.Formulas["git"].Installed {
 		t.Error("missing formula")

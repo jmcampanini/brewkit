@@ -11,7 +11,6 @@ import (
 // once at the start of a command so per-item idempotency checks don't
 // shell out per entry.
 type State struct {
-	Taps     map[string]bool
 	Formulas map[string]FormulaState
 	Casks    map[string]CaskState
 }
@@ -46,9 +45,13 @@ type Result struct {
 // with in-memory state for tests.
 type Brewer interface {
 	State(ctx context.Context) (*State, error)
+	// TapState maps installed tap names to their whole-tap trust status.
+	TapState(ctx context.Context) (map[string]bool, error)
 
 	// Tap accepts an optional url for taps not in Homebrew's default index.
 	Tap(ctx context.Context, name, url string) (Result, error)
+	// TrustTap trusts the whole installed tap, resolving its remote in Homebrew.
+	TrustTap(ctx context.Context, name string) (Result, error)
 
 	BrewInstall(ctx context.Context, name string) (Result, error)
 	BrewUpgrade(ctx context.Context, name string) (Result, error)
@@ -85,7 +88,6 @@ var (
 // EmptyState returns a State with non-nil empty maps.
 func EmptyState() *State {
 	return &State{
-		Taps:     map[string]bool{},
 		Formulas: map[string]FormulaState{},
 		Casks:    map[string]CaskState{},
 	}
