@@ -40,7 +40,9 @@ func TestExecTapState(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("BREWKIT_TEST_TAP_JSON", tt.json)
+			t.Setenv("HOMEBREW_NO_GITHUB_API", "0")
 			e := &Exec{Bin: brewFixture(t, `
+test "$HOMEBREW_NO_GITHUB_API" = 1
 if [ "$#" -ne 3 ] || [ "$1" != tap-info ] || [ "$2" != --installed ] || [ "$3" != --json=v1 ]; then
   echo "unexpected probe: $*" >&2
   exit 9
@@ -75,7 +77,9 @@ func TestExecTapStateFailure(t *testing.T) {
 }
 
 func TestExecTapArgumentsAndOutput(t *testing.T) {
+	t.Setenv("HOMEBREW_NO_GITHUB_API", "0")
 	e := &Exec{Bin: brewFixture(t, `
+test "$HOMEBREW_NO_GITHUB_API" = 0
 printf '<%s>\n' "$@"
 echo 'brew diagnostic' >&2
 `)}

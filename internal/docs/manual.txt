@@ -167,29 +167,34 @@ Tapfile.<profile>
   Listing a tap authorizes trust for the whole tap, including its
   formulae, casks, and commands. brewkit tap reads installed taps and
   effective trust once with `brew tap-info --installed --json=v1`.
-  It does not query package inventory or available upgrades. Homebrew
-  must support `brew trust --tap` and report trust in tap-info JSON;
+  It does not query package inventory or available upgrades. The query
+  sets HOMEBREW_NO_GITHUB_API=1 to skip GitHub metadata requests;
+  Homebrew may still need its formula-index cache. Homebrew must support
+  `brew trust --tap` and report trust in tap-info JSON;
   missing or invalid trust data fails. Run `brew update` to update it.
 
-  A missing tap is registered with `brew tap <tap> [<url>]`, then trusted
-  with `brew trust --tap <tap>`. An installed but untrusted tap needs
-  only the trust command. Homebrew resolves custom remotes and persists
-  trust; official taps are already trusted. Existing remotes are kept.
+  A missing tap is trusted first with `brew trust --tap <url>` when a URL
+  is supplied, or `brew trust --tap <tap>` otherwise. It is then registered
+  with `brew tap <tap> [<url>]`. Homebrew requires trust before verifying
+  formulas and casks during registration. An installed but untrusted tap
+  needs only `brew trust --tap <tap>`; Homebrew resolves its existing
+  remote and persists trust. Official taps are already trusted.
 
   New registrations print '+ name registered and trusted' and count as
   added. Trust-only changes print '+ name trusted' and count as trusted.
   Only registered, trusted taps count as up-to-date. --hide-unchanged
-  hides those lines while keeping their summary count. If trust fails
-  after registration, the tap stays registered and the entry fails.
-  A later attempt retries trust. fail_fast applies to both operations.
+  hides those lines while keeping their summary count. If trust fails,
+  registration is not attempted. If trust succeeds but registration fails,
+  trust is retained and the entry fails. A later run can retry registration.
+  fail_fast applies to both operations.
 
   --dry-run previews registration and trust without changing either.
   Later duplicate entries see projected successful changes, as in a
   real run. Removing an entry never untaps it or revokes trust.
 
   Trust brewkit's own tap before installing or upgrading brewkit:
+    brew trust --tap https://github.com/jmcampanini/brewkit
     brew tap jmcampanini/brewkit https://github.com/jmcampanini/brewkit
-    brew trust --tap jmcampanini/brewkit
     brew install --HEAD jmcampanini/brewkit/brewkit
 
   For an existing installation, after trusting its tap:

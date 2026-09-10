@@ -47,8 +47,11 @@ func (e *Exec) run(ctx context.Context, env []string, args ...string) (string, e
 // runQuiet returns brew stdout on success and a wrapped error containing
 // stderr on failure. Used for state queries where the user should not
 // see brew's chatter unless something went wrong.
-func (e *Exec) runQuiet(ctx context.Context, args ...string) (string, error) {
+func (e *Exec) runQuiet(ctx context.Context, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, e.bin(), args...)
+	if env != nil {
+		cmd.Env = append(cmd.Environ(), env...)
+	}
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	var stderr bytes.Buffer
@@ -84,7 +87,7 @@ func (e *Exec) State(ctx context.Context) (*State, error) {
 
 func (e *Exec) fillInstalled(ctx context.Context, state *State) error {
 	// `brew list --versions` prints "name v1 v2 ..." per line.
-	formulasOut, err := e.runQuiet(ctx, "list", "--formula", "--versions")
+	formulasOut, err := e.runQuiet(ctx, nil, "list", "--formula", "--versions")
 	if err != nil {
 		return fmt.Errorf("brew list --formula: %w", err)
 	}
@@ -102,7 +105,7 @@ func (e *Exec) fillInstalled(ctx context.Context, state *State) error {
 		}
 	}
 
-	casksOut, err := e.runQuiet(ctx, "list", "--cask", "--versions")
+	casksOut, err := e.runQuiet(ctx, nil, "list", "--cask", "--versions")
 	if err != nil {
 		return fmt.Errorf("brew list --cask: %w", err)
 	}
@@ -132,7 +135,7 @@ type outdatedJSON struct {
 }
 
 func (e *Exec) fillOutdatedFormulas(ctx context.Context, state *State) error {
-	out, err := e.runQuiet(ctx, "outdated", "--formula", "--json=v2")
+	out, err := e.runQuiet(ctx, nil, "outdated", "--formula", "--json=v2")
 	if err != nil {
 		return fmt.Errorf("brew outdated --formula: %w", err)
 	}
@@ -157,7 +160,7 @@ func (e *Exec) fillOutdatedCasks(ctx context.Context, state *State) error {
 	// it opts into casks that brew would otherwise ignore for outdated
 	// checks - those with `auto_updates true` or `version :latest` in
 	// the cask DSL. Without it those casks would silently never upgrade.
-	out, err := e.runQuiet(ctx, "outdated", "--cask", "--greedy", "--json=v2")
+	out, err := e.runQuiet(ctx, nil, "outdated", "--cask", "--greedy", "--json=v2")
 	if err != nil {
 		return fmt.Errorf("brew outdated --cask: %w", err)
 	}
@@ -179,7 +182,7 @@ func (e *Exec) fillOutdatedCasks(ctx context.Context, state *State) error {
 
 // TapState queries installed taps and their effective whole-tap trust.
 func (e *Exec) TapState(ctx context.Context) (map[string]bool, error) {
-	out, err := e.runQuiet(ctx, "tap-info", "--installed", "--json=v1")
+	out, err := e.runQuiet(ctx, []string{"HOMEBREW_NO_GITHUB_API=1"}, "tap-info", "--installed", "--json=v1")
 	if err != nil {
 		return nil, err
 	}
@@ -218,10 +221,10 @@ func (e *Exec) Tap(ctx context.Context, name, url string) (Result, error) {
 	return Result{Output: out, To: name}, err
 }
 
-// TrustTap lets Homebrew resolve the installed tap's remote and persist trust.
-func (e *Exec) TrustTap(ctx context.Context, name string) (Result, error) {
-	out, err := e.run(ctx, nil, "trust", "--tap", "--", name)
-	return Result{Output: out, To: name}, err
+// TrustTap lets Homebrew persist trust for a tap name or remote URL.
+func (e *Exec) TrustTap(ctx context.Context, target string) (Result, error) {
+	out, err := e.run(ctx, nil, "trust", "--tap", "--", target)
+	return Result{Output: out, To: target}, err
 }
 
 // BrewInstall installs a formula via `brew install --formula`.
@@ -289,7 +292,7 @@ type brewInfoFormula struct {
 // brewInfoFirst runs `brew info --json=v2 --formula <name>` and returns
 // the first formula entry from the parsed output.
 func (e *Exec) brewInfoFirst(ctx context.Context, name string) (brewInfoFormula, error) {
-	out, err := e.runQuiet(ctx, "info", "--json=v2", "--formula", name)
+	out, err := e.runQuiet(ctx, nil, "info", "--json=v2", "--formula", name)
 	if err != nil {
 		return brewInfoFormula{}, fmt.Errorf("brew info: %w", err)
 	}
@@ -354,7 +357,7 @@ func (e *Exec) HeadLatestSHA(ctx context.Context, name string) (string, bool, er
 		return "", true, fmt.Errorf("brew fetch --HEAD: %w", err)
 	}
 
-	cacheRepo, err := e.runQuiet(ctx, "--cache", "--HEAD", name)
+	cacheRepo, err := e.runQuiet(ctx, nil, "--cache", "--HEAD", name)
 	if err != nil {
 		return "", true, fmt.Errorf("brew --cache --HEAD: %w", err)
 	}

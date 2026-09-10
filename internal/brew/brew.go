@@ -50,8 +50,9 @@ type Brewer interface {
 
 	// Tap accepts an optional url for taps not in Homebrew's default index.
 	Tap(ctx context.Context, name, url string) (Result, error)
-	// TrustTap trusts the whole installed tap, resolving its remote in Homebrew.
-	TrustTap(ctx context.Context, name string) (Result, error)
+	// TrustTap accepts a tap name or remote URL. For an installed tap name,
+	// Homebrew resolves its remote; a missing custom tap needs its URL.
+	TrustTap(ctx context.Context, target string) (Result, error)
 
 	BrewInstall(ctx context.Context, name string) (Result, error)
 	BrewUpgrade(ctx context.Context, name string) (Result, error)

@@ -22,12 +22,14 @@ func TestRunApply_TapTrust(t *testing.T) {
 		dryRun        bool
 		hideUnchanged bool
 		quiet         bool
+		url           string
 		wantLine      string
 		wantSummary   string
 		wantOps       []brew.FakeOp
 	}{
-		{name: "new", wantLine: "+ user/tools registered and trusted", wantSummary: "1 added", wantOps: []brew.FakeOp{brew.OpTap, brew.OpTrustTap}},
-		{name: "installed untrusted", installed: true, wantLine: "+ user/tools trusted", wantSummary: "1 trusted", wantOps: []brew.FakeOp{brew.OpTrustTap}},
+		{name: "new custom remote", url: "https://example.com/tools.git", wantLine: "+ user/tools registered and trusted", wantSummary: "1 added", wantOps: []brew.FakeOp{brew.OpTrustTap, brew.OpTap}},
+		{name: "new default remote", wantLine: "+ user/tools registered and trusted", wantSummary: "1 added", wantOps: []brew.FakeOp{brew.OpTrustTap, brew.OpTap}},
+		{name: "installed untrusted keeps remote", installed: true, url: "https://example.com/ignored.git", wantLine: "+ user/tools trusted", wantSummary: "1 trusted", wantOps: []brew.FakeOp{brew.OpTrustTap}},
 		{name: "installed trusted", installed: true, trusted: true, wantLine: "✓ user/tools", wantSummary: "1 up-to-date"},
 		{name: "preview new", dryRun: true, wantLine: "+ user/tools registered and trusted (dry-run)", wantSummary: "1 added"},
 		{name: "preview trust", installed: true, dryRun: true, wantLine: "+ user/tools trusted (dry-run)", wantSummary: "1 trusted"},
@@ -39,12 +41,15 @@ func TestRunApply_TapTrust(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resetFlags()
 			defer resetFlags()
-			dir := fixtureRepo(t, map[string]string{"Tapfile.common": "user/tools https://example.com/tools.git\n"})
+			dir := fixtureRepo(t, map[string]string{"Tapfile.common": "user/tools " + tt.url + "\n"})
 			flags.configPath = filepath.Join(dir, "brewkit.toml")
 			flags.dryRun, flags.hideUnchanged, flags.quiet = tt.dryRun, tt.hideUnchanged, tt.quiet
 			fake := brew.NewFake()
 			fake.TapsSet["user/tools"] = tt.installed
-			fake.TrustedTaps["user/tools"] = tt.trusted
+			if tt.installed {
+				fake.TapRemotes["user/tools"] = "https://example.com/existing.git"
+				fake.TrustedTaps["https://example.com/existing.git"] = tt.trusted
+			}
 			probe := &tapProbe{Fake: fake}
 			useBrewer(t, probe)
 
@@ -67,8 +72,15 @@ func TestRunApply_TapTrust(t *testing.T) {
 			var ops []brew.FakeOp
 			for _, call := range fake.Calls {
 				ops = append(ops, call.Op)
-				if call.Op == brew.OpTap && call.Arg != "https://example.com/tools.git" {
+				if call.Op == brew.OpTap && call.Arg != tt.url {
 					t.Errorf("tap remote = %q", call.Arg)
+				}
+				wantTarget := "user/tools"
+				if !tt.installed && tt.url != "" {
+					wantTarget = tt.url
+				}
+				if call.Op == brew.OpTrustTap && call.Name != wantTarget {
+					t.Errorf("trust target = %q, want %q", call.Name, wantTarget)
 				}
 			}
 			if !reflect.DeepEqual(ops, tt.wantOps) {
@@ -77,11 +89,15 @@ func TestRunApply_TapTrust(t *testing.T) {
 			if probe.packageQueries != 0 || probe.tapQueries != 1 {
 				t.Errorf("queries = (%d package, %d tap), want (0, 1)", probe.packageQueries, probe.tapQueries)
 			}
+			state, err := fake.TapState(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
 			if tt.dryRun {
-				if fake.TapsSet["user/tools"] != tt.installed || fake.TrustedTaps["user/tools"] != tt.trusted {
+				if fake.TapsSet["user/tools"] != tt.installed || state["user/tools"] != tt.trusted {
 					t.Error("dry-run changed registration or trust")
 				}
-			} else if !fake.TapsSet["user/tools"] || !fake.TrustedTaps["user/tools"] {
+			} else if !fake.TapsSet["user/tools"] || !state["user/tools"] {
 				t.Error("successful tap entry is not registered and trusted")
 			}
 		})
@@ -162,24 +178,16 @@ func TestRunApply_TapTrustFailures(t *testing.T) {
 					t.Errorf("later tap state does not match fail_fast=%v", failFast)
 				}
 				if op == brew.OpTrustTap {
-					if !probe.TapsSet["broken/tools"] || probe.TrustedTaps["broken/tools"] || !strings.Contains(errOut, "tap is registered") {
-						t.Errorf("partial failure lost registration or marked trust: %q", errOut)
+					if probe.TapsSet["broken/tools"] || probe.TrustedTaps["broken/tools"] {
+						t.Error("trust failure changed registration or trust")
 					}
-					registrations := 0
 					for _, call := range probe.Calls {
 						if call.Op == brew.OpTap && call.Name == "broken/tools" {
-							registrations++
+							t.Error("registered tap after trust failed")
 						}
 					}
-					if registrations != 1 {
-						t.Errorf("partial failure retried registration %d times, want 1", registrations)
-					}
-				} else {
-					for _, call := range probe.Calls {
-						if call.Op == brew.OpTrustTap && call.Name == "broken/tools" {
-							t.Error("trusted tap after registration failed")
-						}
-					}
+				} else if probe.TapsSet["broken/tools"] || !probe.TrustedTaps["broken/tools"] || !strings.Contains(errOut, "trust retained") {
+					t.Errorf("registration failure lost trust or marked registration: %q", errOut)
 				}
 			})
 		}
@@ -241,16 +249,17 @@ func TestRunApply_TapWithoutSelectedEntriesDoesNotQuery(t *testing.T) {
 }
 
 func TestRunApply_TapSubprocessOutput(t *testing.T) {
-	for _, failTrust := range []bool{false, true} {
-		t.Run(fmt.Sprintf("failTrust=%v", failTrust), func(t *testing.T) {
+	for _, failure := range []string{"none", "trust", "tap"} {
+		t.Run(failure, func(t *testing.T) {
 			resetFlags()
 			defer resetFlags()
 			dir := fixtureRepo(t, map[string]string{"Tapfile.common": "user/tools https://example.com/tools.git\n"})
 			flags.configPath = filepath.Join(dir, "brewkit.toml")
-			flags.verbose = !failTrust
-			flags.quiet = failTrust
-			t.Setenv("BREWKIT_TEST_FAIL_TRUST", fmt.Sprint(failTrust))
-			t.Setenv("BREWKIT_TEST_TAP_MARKER", filepath.Join(dir, "registered"))
+			flags.verbose = failure == "none"
+			flags.quiet = failure != "none"
+			t.Setenv("BREWKIT_TEST_FAILURE", failure)
+			trustMarker := filepath.Join(dir, "trusted")
+			t.Setenv("BREWKIT_TEST_TRUST_MARKER", trustMarker)
 			bin := filepath.Join(dir, "brew")
 			script := `#!/bin/sh
 set -eu
@@ -259,15 +268,16 @@ case "$*" in
     echo '[]'
     ;;
   'tap -- user/tools https://example.com/tools.git')
-    touch "$BREWKIT_TEST_TAP_MARKER"
+    test -f "$BREWKIT_TEST_TRUST_MARKER"
     echo 'registration stdout'
     echo 'registration stderr' >&2
+    if [ "$BREWKIT_TEST_FAILURE" = tap ]; then exit 7; fi
     ;;
-  'trust --tap -- user/tools')
-    test -f "$BREWKIT_TEST_TAP_MARKER"
+  'trust --tap -- https://example.com/tools.git')
     echo 'trust stdout'
     echo 'trust stderr' >&2
-    if [ "$BREWKIT_TEST_FAIL_TRUST" = true ]; then exit 6; fi
+    if [ "$BREWKIT_TEST_FAILURE" = trust ]; then exit 6; fi
+    touch "$BREWKIT_TEST_TRUST_MARKER"
     ;;
   *) echo "unexpected brew command: $*" >&2; exit 9 ;;
 esac
@@ -282,22 +292,34 @@ esac
 				runErr = runApply(context.Background(), profile.KindTap, nil)
 			})
 
-			if (runErr != nil) != failTrust {
-				t.Errorf("runApply = %v, want failure %v", runErr, failTrust)
+			if (runErr != nil) != (failure != "none") {
+				t.Errorf("runApply = %v, want failure %q", runErr, failure)
 			}
 			details := out
-			if failTrust {
+			if failure != "none" {
 				details = errOut
-				if out != "" || !strings.Contains(errOut, "trust failed") || !strings.Contains(errOut, "tap is registered") {
+				if out != "" || !strings.Contains(errOut, failure+" failed") {
 					t.Errorf("quiet failure output = (%q, %q)", out, errOut)
 				}
 			} else if errOut != "" || !strings.Contains(out, "Summary: 1 added") {
 				t.Errorf("verbose success output = (%q, %q)", out, errOut)
 			}
-			for _, line := range []string{"registration stdout", "registration stderr", "trust stdout", "trust stderr"} {
+			lines := []string{"trust stdout", "trust stderr"}
+			if failure != "trust" {
+				lines = append(lines, "registration stdout", "registration stderr")
+			}
+			for _, line := range lines {
 				if !strings.Contains(details, line) {
 					t.Errorf("subprocess output missing %q: %q", line, details)
 				}
+			}
+			_, statErr := os.Stat(trustMarker)
+			if failure == "trust" {
+				if !errors.Is(statErr, os.ErrNotExist) || strings.Contains(details, "registration stdout") {
+					t.Error("registration ran after failed trust")
+				}
+			} else if statErr != nil {
+				t.Errorf("trust was not retained: %v", statErr)
 			}
 		})
 	}

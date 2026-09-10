@@ -13,6 +13,7 @@ import (
 type Fake struct {
 	// Initial / current state.
 	TapsSet      map[string]bool
+	TapRemotes   map[string]string
 	TrustedTaps  map[string]bool
 	FormulasMap  map[string]FormulaState
 	CasksMap     map[string]CaskState
@@ -55,6 +56,7 @@ type FakeCall struct {
 func NewFake() *Fake {
 	return &Fake{
 		TapsSet:      map[string]bool{},
+		TapRemotes:   map[string]string{},
 		TrustedTaps:  map[string]bool{},
 		FormulasMap:  map[string]FormulaState{},
 		CasksMap:     map[string]CaskState{},
@@ -90,20 +92,27 @@ func (f *Fake) TapState(_ context.Context) (map[string]bool, error) {
 	out := make(map[string]bool)
 	for name, installed := range f.TapsSet {
 		if installed {
-			out[name] = f.TrustedTaps[name]
+			target := name
+			if remote := f.TapRemotes[name]; remote != "" {
+				target = remote
+			}
+			out[name] = f.TrustedTaps[target]
 		}
 	}
 	return out, nil
 }
 
-// TrustTap records the call and marks the tap as trusted.
-func (f *Fake) TrustTap(_ context.Context, name string) (Result, error) {
-	f.record(OpTrustTap, name, "")
-	if f.shouldFail(OpTrustTap, name) {
-		return Result{}, fmt.Errorf("fake: trust tap %s failed", name)
+// TrustTap records the call and trusts the target or its installed remote.
+func (f *Fake) TrustTap(_ context.Context, target string) (Result, error) {
+	f.record(OpTrustTap, target, "")
+	if f.shouldFail(OpTrustTap, target) {
+		return Result{}, fmt.Errorf("fake: trust tap %s failed", target)
 	}
-	f.TrustedTaps[name] = true
-	return Result{To: name}, nil
+	if remote := f.TapRemotes[target]; remote != "" {
+		target = remote
+	}
+	f.TrustedTaps[target] = true
+	return Result{To: target}, nil
 }
 
 // Tap records the call and marks the tap as registered.
@@ -113,6 +122,7 @@ func (f *Fake) Tap(_ context.Context, name, url string) (Result, error) {
 		return Result{}, fmt.Errorf("fake: tap %s failed", name)
 	}
 	f.TapsSet[name] = true
+	f.TapRemotes[name] = url
 	return Result{To: name}, nil
 }
 

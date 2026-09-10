@@ -57,9 +57,9 @@ func (b *progressBrewer) TapState(ctx context.Context) (map[string]bool, error) 
 	return state, err
 }
 
-func (b *progressBrewer) TrustTap(ctx context.Context, name string) (brew.Result, error) {
-	return b.withResult(fmt.Sprintf("Trusting %s...", name), func() (brew.Result, error) {
-		return b.next.TrustTap(ctx, name)
+func (b *progressBrewer) TrustTap(ctx context.Context, target string) (brew.Result, error) {
+	return b.withResult(fmt.Sprintf("Trusting %s...", target), func() (brew.Result, error) {
+		return b.next.TrustTap(ctx, target)
 	})
 }
 

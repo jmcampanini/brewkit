@@ -300,22 +300,24 @@ func (rc *runContext) applyTap(e *parse.Entry) error {
 		return nil
 	}
 
-	var output string
-	if !installed {
-		res, err := rc.brewer.Tap(rc.ctx, e.Name, e.Extra)
-		if err != nil {
-			rc.printer.Error(e.Name, "tap failed", res.Output)
-			return fmt.Errorf("register tap %q: %w", e.Name, err)
-		}
-		output = res.Output
-		rc.taps[e.Name] = false
+	trustTarget := e.Name
+	if !installed && e.Extra != "" {
+		trustTarget = e.Extra
+	}
+	res, err := rc.brewer.TrustTap(rc.ctx, trustTarget)
+	if err != nil {
+		rc.printer.Error(e.Name, "trust failed", res.Output)
+		return fmt.Errorf("trust tap %q: %w", e.Name, err)
 	}
 
-	res, err := rc.brewer.TrustTap(rc.ctx, e.Name)
-	output += res.Output
-	if err != nil {
-		rc.printer.Error(e.Name, "trust failed (tap is registered; rerun to retry)", output)
-		return fmt.Errorf("trust tap %q: %w", e.Name, err)
+	output := res.Output
+	if !installed {
+		res, err := rc.brewer.Tap(rc.ctx, e.Name, e.Extra)
+		output += res.Output
+		if err != nil {
+			rc.printer.Error(e.Name, "tap failed (trust retained; rerun to retry)", output)
+			return fmt.Errorf("register tap %q: %w", e.Name, err)
+		}
 	}
 
 	rc.taps[e.Name] = true
