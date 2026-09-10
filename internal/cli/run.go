@@ -214,6 +214,7 @@ type runContext struct {
 	brewer   brew.Brewer
 	printer  *ui.Printer
 	state    *brew.State
+	taps     map[string]bool
 	dryRun   bool
 	failFast bool
 
@@ -274,26 +275,54 @@ func (rc *runContext) apply(t profile.Kind, e *parse.Entry) error {
 }
 
 func (rc *runContext) applyTap(e *parse.Entry) error {
-	if err := rc.ensureState(); err != nil {
-		return err
+	if rc.taps == nil {
+		state, err := rc.brewer.TapState(rc.ctx)
+		if err != nil {
+			rc.printer.Error(e.Name, "tap state query failed", err.Error())
+			return fmt.Errorf("query tap state for %q: %w", e.Name, err)
+		}
+		rc.taps = state
 	}
-	if rc.state.Taps[e.Name] {
+
+	trusted, installed := rc.taps[e.Name]
+	if installed && trusted {
 		rc.printer.Item(ui.SymUpToDate, e.Name, "")
 		return nil
 	}
+
+	sym, detail := ui.SymTrusted, "trusted"
+	if !installed {
+		sym, detail = ui.SymAdded, "registered and trusted"
+	}
 	if rc.dryRun {
-		rc.printer.Item(ui.SymAdded, e.Name, "")
-		rc.state.Taps[e.Name] = true
+		rc.printer.Item(sym, e.Name, detail)
+		rc.taps[e.Name] = true
 		return nil
 	}
-	res, err := rc.brewer.Tap(rc.ctx, e.Name, e.Extra)
-	if err != nil {
-		rc.printer.Error(e.Name, "tap failed", res.Output)
-		return err
+
+	trustTarget := e.Name
+	if !installed && e.Extra != "" {
+		trustTarget = e.Extra
 	}
-	rc.printer.Item(ui.SymAdded, e.Name, "")
-	rc.printer.Verbose(res.Output)
-	rc.state.Taps[e.Name] = true
+	res, err := rc.brewer.TrustTap(rc.ctx, trustTarget)
+	if err != nil {
+		rc.printer.Error(e.Name, "trust failed", res.Output)
+		return fmt.Errorf("trust tap %q: %w", e.Name, err)
+	}
+
+	output := res.Output
+	if !installed {
+		res, err := rc.brewer.Tap(rc.ctx, e.Name, e.Extra)
+		output += res.Output
+		if err != nil {
+			rc.printer.Error(e.Name, "tap failed (trust retained; rerun to retry)", output)
+			return fmt.Errorf("register tap %q: %w", e.Name, err)
+		}
+	}
+
+	rc.taps[e.Name] = true
+	rc.printer.Item(sym, e.Name, detail)
+	rc.printer.Verbose(output)
 	return nil
 }
 
