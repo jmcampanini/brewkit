@@ -13,6 +13,7 @@ configuration keys at more length than command help does; command help
 text has no terminal escapes, no configuration is read, and no brew
 command runs. --quiet does not suppress the manual, and --output-prefix
 prefixes each of its lines.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runDocs(cmd.Context())
 		},
