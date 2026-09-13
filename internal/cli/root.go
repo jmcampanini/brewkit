@@ -99,6 +99,14 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 	root.AddCommand(newDocsCmd())
 	root.AddCommand(newExitCodesTopic())
 
+	// Cobra registers --help and --version inside Execute, after Find has
+	// already stripped flags to locate the subcommand. Without the flags
+	// known up front, Find treats the value of a flag that follows --help
+	// or --version as an operand, so `brewkit --help --config x` fails with
+	// unknown command "x". Registering them here keeps Find's parse exact.
+	root.InitDefaultHelpFlag()
+	root.InitDefaultVersionFlag()
+
 	return root
 }
 
