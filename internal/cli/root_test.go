@@ -49,10 +49,9 @@ func TestEveryApplicationCommandHasWrappedLongHelp(t *testing.T) {
 
 // TestEveryApplicationCommandDeclaresGrammar holds the CLI command contract's
 // presence invariant. The root has subcommands, so Cobra owns its grammar; a
-// validator there would disable suggestions and the built-in help topic. Every
-// other command declares one, and every command with subcommands has a RunE,
-// because Cobra prints help for a non-runnable command before validating
-// operands.
+// validator there would disable the built-in help topic. Every other command
+// declares one, and every command with subcommands has a RunE, because Cobra
+// prints help for a non-runnable command before validating operands.
 func TestEveryApplicationCommandDeclaresGrammar(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
