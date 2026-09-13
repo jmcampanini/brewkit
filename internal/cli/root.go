@@ -70,9 +70,12 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 		Example: `  brewkit tap && brewkit brew && brewkit head && brewkit cask
   brewkit --profiles work,personal brew --dry-run
   BREWKIT_PROFILES=work brewkit cask ghostty`,
-		Version:       Version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Version: Version,
+		// An unknown command reports only unknown command "x" for "brewkit",
+		// the same message the subcommands give, with no suggestion list.
+		DisableSuggestions: true,
+		SilenceUsage:       true,
+		SilenceErrors:      true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
