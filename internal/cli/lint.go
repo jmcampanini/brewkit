@@ -33,6 +33,7 @@ exit status is 1, and 'brewkit: lint failed: N violation(s)' goes to
 stderr. --verbose prints the offending line under each violation.
 --quiet prints only the violation lines and nothing when clean.
 --dry-run has no effect.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runLint(cmd.Context())
 		},

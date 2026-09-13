@@ -73,6 +73,7 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},

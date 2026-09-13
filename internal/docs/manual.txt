@@ -73,7 +73,10 @@ Commands
 
 Each apply command accepts an optional positional arg to scope the
 operation to a single item, looked up by name (full or short, after
-the last `/`) across the active profiles.
+the last `/`) across the active profiles. `brewkit lint`,
+`brewkit config`, and `brewkit docs` take no positional arg. An
+unexpected arg, or a second arg on an apply command, is a usage error:
+brewkit exits 1 before reading any file or running any program.
 
 Apply-command flags:
   --hide-unchanged  suppress per-item lines for already satisfied
