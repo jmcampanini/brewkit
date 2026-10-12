@@ -1,10 +1,12 @@
 ## Build and validate
 
-- Use `make`; do not invoke `go build` / `go test` / `golangci-lint` directly.
-- Run `make help` to discover available tasks. Key tasks:
-  - Run `make build` to compile to `build/brewkit` with version ldflags.
-  - Run `make test` to execute `go test -count=1 -race ./...`.
-  - Run `make check` to verify formatting, module tidiness, lint, uncached race tests, the production build, version output, and vulnerabilities. Run this before declaring work done.
+- This repository uses mise for tool versions and task execution. Run tasks with `mise run <task>`; do not call `go`, `golangci-lint`, or similar tools directly.
+- Common tasks (`mise tasks` lists all of them):
+  - `mise run check` runs the complete verification contract. **Run this before declaring work done.**
+  - `mise run build` compiles `build/brewkit` with version ldflags.
+  - `mise run test` runs `go test -count=1 -race ./...`.
+  - `mise run fmt` and `mise run lint-fix` apply formatting and lint fixes.
+- `mise.toml` pins Go, golangci-lint, and govulncheck; `mise.lock` records their checksums. Bump a tool with `mise upgrade --bump <tool>`, run `mise lock` and `mise run check`, and commit both files.
 
 ## Conventions
 
@@ -15,4 +17,4 @@
 
 ## Before committing
 
-- Always run `make check`; it is the single source of truth for "this is ready".
+- Always run `mise run check`; it is the single source of truth for "this is ready".

@@ -24,12 +24,18 @@ brew upgrade --fetch-HEAD brewkit
 
 ### From source
 
+With Git and [mise](https://mise.jdx.dev) installed (`brew install mise` on macOS), mise supplies the pinned Go toolchain from `mise.toml`:
+
 ```sh
 git clone https://github.com/jmcampanini/brewkit
 cd brewkit
-make build
+mise trust
+mise install
+mise run build
 ./build/brewkit --version
 ```
+
+To upgrade, run `git pull`, rebuild with `mise install && mise run build`, and replace the binary on your `PATH`.
 
 ## Representative commands
 
