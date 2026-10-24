@@ -13,7 +13,3 @@
 /coverage.out
 /coverage.html
 *.coverprofile
-
-# mise personal overrides
-mise.local.toml
-.mise.local.toml

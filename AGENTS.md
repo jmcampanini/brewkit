@@ -1,12 +1,15 @@
 ## Build and validate
 
-- This repository uses mise for tool versions and task execution. Run tasks with `mise run <task>`; do not call `go`, `golangci-lint`, or similar tools directly.
-- Common tasks (`mise tasks` lists all of them):
-  - `mise run check` runs the complete verification contract. **Run this before declaring work done.**
-  - `mise run build` compiles `build/brewkit` with version ldflags.
-  - `mise run test` runs `go test -count=1 -race ./...`.
-  - `mise run fmt` and `mise run lint-fix` apply formatting and lint fixes.
-- `mise.toml` pins Go, golangci-lint, and govulncheck; `mise.lock` records their checksums. Bump a tool with `mise upgrade --bump <tool>`, run `mise lock` and `mise run check`, and commit both files.
+- Install prerequisites with `brew install git mise`, then run `mise trust` and `mise install`.
+- Use `mise run <task>`; do not invoke pinned tools directly.
+- Run `mise tasks` to discover available tasks. Key tasks:
+  - Run `mise run build` to compile to `build/brewkit` with version ldflags.
+  - Run `mise run test` to run every test uncached with the race detector.
+  - Run `mise run check` to verify formatting, module tidiness, lint, uncached race tests, the production build, version output, and vulnerabilities. Run this before declaring work done.
+
+## Tool updates
+
+- Run `mise upgrade --bump <tool>`, then `mise lock` and `mise run check`. Commit `mise.toml` and `mise.lock` together.
 
 ## Conventions
 
