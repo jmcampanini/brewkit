@@ -25,9 +25,12 @@ brew upgrade --fetch-HEAD brewkit
 ### From source
 
 ```sh
+brew install git mise
 git clone https://github.com/jmcampanini/brewkit
 cd brewkit
-make build
+mise trust
+mise install
+mise run build
 ./build/brewkit --version
 ```
 
