@@ -3,10 +3,12 @@
 - Use `mise run <task>`; do not invoke pinned tools directly.
 - Run `mise run check` before declaring work done.
 
+
 ## Tool updates
 
 - Run `mise upgrade --bump <tool>`, then `mise lock` and `mise run check`.
 - Commit `mise.toml` and `mise.lock` together.
+
 
 ## Documentation and input handling
 

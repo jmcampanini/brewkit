@@ -2,9 +2,11 @@
 
 brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-profile files. A profile is a name such as `work` or `personal`; its `Tapfile.<profile>`, `Brewfile.<profile>`, `Headfile.<profile>`, and `Caskfile.<profile>` list what that profile needs, several profiles can be active at once, and `brewkit lint` keeps the files sorted and commented consistently. brewkit never removes a tap, formula, or cask that is not listed.
 
+
 ## Install
 
 brewkit distributes from HEAD only; there is no release channel or tagged binary.
+
 
 ### Homebrew
 
@@ -20,6 +22,7 @@ Upgrade to the latest commit:
 brew upgrade --fetch-HEAD brewkit
 ```
 
+
 ### From source
 
 ```sh
@@ -31,6 +34,7 @@ mise install
 mise run build
 ./build/brewkit --version
 ```
+
 
 ## Representative commands
 
@@ -48,10 +52,12 @@ mise run build
 
 A full run is `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` in that order, usually after `brewkit lint` has checked the files.
 
+
 ## Required external programs
 
 - `brew`: `tap`, `brew`, `head`, and `cask` run Homebrew's `brew` from `PATH`, and `tap` needs a Homebrew with `brew trust --tap`.
 - `git`: `head` runs it against the cached HEAD source to find each formula's latest upstream commit.
+
 
 ## Configuration
 
