@@ -4,9 +4,11 @@ brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-profi
 
 Command help is the canonical reference: `brewkit --help` and each command's `--help` describe every user-facing contract, `brewkit config --help` describes configuration precedence and the `brewkit.toml` keys, and `brewkit help exit-codes` describes exit statuses. `brewkit docs` prints the longer manual.
 
+
 ## Install
 
 brewkit distributes from HEAD only; there is no release channel or tagged binary.
+
 
 ### Homebrew
 
@@ -22,6 +24,7 @@ Upgrade to the latest commit:
 brew upgrade --fetch-HEAD brewkit
 ```
 
+
 ### From source
 
 ```sh
@@ -33,6 +36,7 @@ mise install
 mise run build
 ./build/brewkit --version
 ```
+
 
 ## Representative commands
 
@@ -48,11 +52,13 @@ mise run build
 
 A full run is `brewkit lint`, then `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` in that order. Selecting profiles for one run looks like `brewkit --profiles work,personal brew` or `BREWKIT_PROFILES=work brewkit cask`.
 
+
 ## Required external programs
 
 Homebrew's `brew` must be on `PATH` for `tap`, `brew`, `head`, and `cask`; `head` also needs `git`. `lint`, `config`, and `docs` run on their own.
 
 `tap` requires Homebrew with `brew trust --tap` and trust status in `brew tap-info --installed --json=v1`. Run `brew update` to obtain current support. Listing a tap authorizes its formulae, casks, and commands. Removing the entry never revokes trust or untaps it.
+
 
 ## Configuration
 
