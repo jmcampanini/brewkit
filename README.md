@@ -44,13 +44,13 @@ mise run build
 | `brewkit brew ripgrep` | Apply only the listed entry named `ripgrep`. |
 | `brewkit config` | Print the configuration in effect with the source of each value. |
 
-`brewkit --help`, each command's `--help`, and the help topics `brewkit help exit-codes` and `brewkit docs` are the canonical reference.
+`brewkit --help`, each command's `--help`, and the help topic `brewkit help exit-codes` are the canonical reference; `brewkit docs` prints the longer manual that supplements them.
 
-A full run is `brewkit lint`, then `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` in that order. Selecting profiles for one run looks like `brewkit --profiles work,personal brew` or `BREWKIT_PROFILES=work brewkit cask`.
+A full run is `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` in that order, usually after `brewkit lint` has checked the files.
 
 ## Required external programs
 
-- `brew`: `tap`, `brew`, `head`, and `cask` run Homebrew's `brew` from `PATH`.
+- `brew`: `tap`, `brew`, `head`, and `cask` run Homebrew's `brew` from `PATH`, and `tap` needs a Homebrew with `brew trust --tap`.
 - `git`: `head` runs it against the cached HEAD source to find each formula's latest upstream commit.
 
 ## Configuration
