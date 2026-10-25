@@ -59,7 +59,7 @@ func newApplyCmd(app *commandContext, spec applyCommandSpec) *cobra.Command {
 				Config:   cfg,
 				DryRun:   app.flags.dryRun,
 				Profiles: profiles,
-				Printer: ui.NewTerminalPrinter(ui.PrinterOptions{
+				Printer: ui.NewTerminalPrinter(ui.TerminalOptions{
 					Level:         level,
 					DryRun:        app.flags.dryRun,
 					HideUnchanged: app.flags.hideUnchanged,

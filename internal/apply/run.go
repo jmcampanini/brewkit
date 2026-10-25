@@ -172,7 +172,7 @@ type runContext struct {
 // The two things this laziness enables:
 //  1. `brewkit head` never invokes State at all (applyHead uses only
 //     per-formula probes and skips the ensureState call).
-//  2. A run that finds no matching profile files - runApply stats each
+//  2. A run that finds no matching profile files - Run stats each
 //     path and `continue`s on ENOENT before ever entering apply* - can
 //     complete without shelling out to brew, which matters on machines
 //     where brew is unavailable or transiently broken.

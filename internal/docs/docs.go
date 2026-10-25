@@ -1,4 +1,5 @@
-// Package docs exposes the embedded brewkit manual as plain text.
+// Package docs holds the embedded brewkit manual and the help fragments
+// that command long descriptions share.
 package docs
 
 import _ "embed"

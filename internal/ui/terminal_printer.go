@@ -2,8 +2,18 @@ package ui
 
 import "os"
 
-// NewTerminalPrinter configures a printer for the process output streams.
-func NewTerminalPrinter(opts PrinterOptions) *Printer {
+// TerminalOptions carries the caller-chosen printer settings. NewTerminalPrinter
+// derives everything else from the process output streams.
+type TerminalOptions struct {
+	Level         Level
+	DryRun        bool
+	HideUnchanged bool
+	OutputPrefix  string
+}
+
+// NewTerminalPrinter builds a Printer on stdout and stderr, detecting color
+// profiles, the theme, and spinner support from the terminals.
+func NewTerminalPrinter(opts TerminalOptions) *Printer {
 	level := opts.Level
 	stdoutTTY := isTerminal(os.Stdout)
 	stderrTTY := isTerminal(os.Stderr)
