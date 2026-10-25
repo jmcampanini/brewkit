@@ -3,18 +3,20 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/ui"
 	"github.com/jmcampanini/go-config-loader/configreporter"
 )
 
 var filepathAbs = filepath.Abs
 
-func runConfig(_ context.Context) error {
-	cfg, report, profiles, err := loadEffectiveConfig()
+func (app *commandContext) runConfig(_ context.Context) error {
+	cfg, report, profiles, err := profile.LoadConfig(app.flags.configPath, app.configFlagSet)
 	if err != nil {
 		return err
 	}
@@ -30,7 +32,7 @@ func runConfig(_ context.Context) error {
 		return err
 	}
 
-	w := stdoutWriter()
+	w := ui.NewLinePrefixWriter(os.Stdout, app.flags.outputPrefix)
 	if _, err := w.Write(out); err != nil {
 		return err
 	}

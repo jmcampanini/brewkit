@@ -1,12 +1,13 @@
 package cli
 
 import (
+	"github.com/jmcampanini/brewkit/internal/docs"
 	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/spf13/cobra"
 )
 
-func newBrewCmd() *cobra.Command {
-	return newApplyCmd(applyCommandSpec{
+func newBrewCmd(app *commandContext) *cobra.Command {
+	cmd := newApplyCmd(app, applyCommandSpec{
 		use:   "brew [FORMULA]",
 		short: "Apply Brewfile entries for active profiles",
 		kind:  profile.KindBrew,
@@ -17,9 +18,11 @@ Brewfile.<profile> for the active profiles. For each entry brewkit runs
 installed version. A name may be qualified as user/tap/name; it also
 matches the installed short name. Formulas are never uninstalled.
 
-` + brewStateHelp,
+` + docs.BrewStateHelp,
 		example: `  brewkit brew
   brewkit --profiles work,personal brew --dry-run
   brewkit brew ripgrep`,
 	})
+	cmd.Flags().BoolVar(&app.flags.hideUnchanged, "hide-unchanged", false, "hide lines for entries already satisfied")
+	return cmd
 }

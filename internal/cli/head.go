@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newHeadCmd() *cobra.Command {
-	return newApplyCmd(applyCommandSpec{
+func newHeadCmd(app *commandContext) *cobra.Command {
+	cmd := newApplyCmd(app, applyCommandSpec{
 		use:   "head [FORMULA]",
 		short: "Apply Headfile entries for active profiles (SHA-idempotent)",
 		kind:  profile.KindHead,
@@ -31,4 +31,6 @@ queries the other apply commands use.`,
   brewkit head --dry-run
   brewkit head direnv`,
 	})
+	cmd.Flags().BoolVar(&app.flags.hideUnchanged, "hide-unchanged", false, "hide lines for entries already satisfied")
+	return cmd
 }

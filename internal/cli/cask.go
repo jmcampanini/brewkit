@@ -1,12 +1,13 @@
 package cli
 
 import (
+	"github.com/jmcampanini/brewkit/internal/docs"
 	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/spf13/cobra"
 )
 
-func newCaskCmd() *cobra.Command {
-	return newApplyCmd(applyCommandSpec{
+func newCaskCmd(app *commandContext) *cobra.Command {
+	cmd := newApplyCmd(app, applyCommandSpec{
 		use:   "cask [CASK]",
 		short: "Apply Caskfile entries for active profiles (greedy upgrades)",
 		kind:  profile.KindCask,
@@ -20,9 +21,11 @@ After the run, upgraded casks are listed on stdout under 'Restart these
 apps to apply upgrades' unless --quiet is set. Casks are never
 uninstalled.
 
-` + brewStateHelp,
+` + docs.BrewStateHelp,
 		example: `  brewkit cask
   brewkit cask --dry-run
   brewkit cask ghostty`,
 	})
+	cmd.Flags().BoolVar(&app.flags.hideUnchanged, "hide-unchanged", false, "hide lines for entries already satisfied")
+	return cmd
 }

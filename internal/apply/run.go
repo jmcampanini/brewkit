@@ -1,4 +1,5 @@
-package cli
+// Package apply applies layered profile entries through Homebrew.
+package apply
 
 import (
 	"context"
@@ -15,80 +16,25 @@ import (
 	"github.com/jmcampanini/brewkit/internal/ui"
 )
 
-// brewerFactory is overridden in tests to inject a Fake brewer.
-var brewerFactory = func() brew.Brewer { return brew.NewExec() }
-
-func loadEffectiveConfig() (config.Config, config.LoadReport, []string, error) {
-	cfg, report, err := config.LoadWithReport(flags.configPath, configFlagSet)
-	if err != nil {
-		return config.Config{}, config.LoadReport{}, nil, err
-	}
-	resolved, err := profile.Resolve(cfg)
-	if err != nil {
-		return config.Config{}, config.LoadReport{}, nil, err
-	}
-	return cfg, report, resolved, nil
+// Options supplies configuration, Homebrew operations, and presentation for a run.
+type Options struct {
+	Brewer   brew.Brewer
+	Config   config.Config
+	DryRun   bool
+	Printer  *ui.Printer
+	Profiles []string
 }
 
-func newPrinter() *ui.Printer {
-	level := ui.LevelNormal
-	switch {
-	case flags.verbose:
-		level = ui.LevelVerbose
-	case flags.quiet:
-		level = ui.LevelQuiet
-	}
-	stdoutTTY := isTerminal(os.Stdout)
-	stderrTTY := isTerminal(os.Stderr)
-	stdoutProfile := terminalColorProfile(os.Stdout)
-	stderrProfile := terminalColorProfile(os.Stderr)
-	stdoutColorTerminal := stdoutTTY && terminalColorsEnabled(stdoutProfile)
-	stderrColorTerminal := stderrTTY && terminalColorsEnabled(stderrProfile)
-	themeOutput := os.Stdout
-	themeProfile := stdoutProfile
-	if !stdoutColorTerminal && stderrColorTerminal {
-		themeOutput = os.Stderr
-		themeProfile = stderrProfile
-	}
-	allowThemeQuery := level != ui.LevelQuiet
-	theme := ui.ThemeForBackground(terminalHasDarkBackground(themeOutput, themeProfile, allowThemeQuery))
-	spinner := level == ui.LevelNormal && stdoutTTY && stderrTTY
-	spinnerWidth := 0
-	if spinner {
-		spinnerWidth = terminalWidth(os.Stderr)
-		if spinnerWidth <= 1 {
-			spinner = false
-		}
-	}
-	return ui.New(os.Stdout, os.Stderr, ui.PrinterOptions{
-		Level:         level,
-		OutputProfile: stdoutProfile,
-		ErrorProfile:  stderrProfile,
-		Theme:         theme,
-		DryRun:        flags.dryRun,
-		HideUnchanged: flags.hideUnchanged,
-		OutputPrefix:  flags.outputPrefix,
-		Spinner:       spinner,
-		SpinnerWidth:  spinnerWidth,
-	})
-}
+// Run applies one kind of profile entry using the supplied configuration and output.
+func Run(ctx context.Context, t profile.Kind, args []string, opts Options) error {
+	cfg, profiles := opts.Config, opts.Profiles
 
-// runApply is the shared implementation for `brewkit tap|brew|head|cask`.
-func runApply(ctx context.Context, t profile.Kind, args []string) error {
-	cfg, _, profiles, err := loadEffectiveConfig()
-	if err != nil {
-		return err
-	}
-	if len(profiles) == 0 {
-		return fmt.Errorf("no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles/--profile, env_profiles, or add a *file.local")
-	}
-
-	printer := newPrinter()
+	printer := opts.Printer
 	rc := &runContext{
 		ctx:      ctx,
-		brewer:   newProgressBrewer(brewerFactory(), printer),
+		brewer:   newProgressBrewer(opts.Brewer, printer),
 		printer:  printer,
-		dryRun:   flags.dryRun,
+		dryRun:   opts.DryRun,
 		failFast: cfg.FailFast,
 	}
 	defer rc.printer.Footer()
@@ -226,7 +172,7 @@ type runContext struct {
 // The two things this laziness enables:
 //  1. `brewkit head` never invokes State at all (applyHead uses only
 //     per-formula probes and skips the ensureState call).
-//  2. A run that finds no matching profile files - runApply stats each
+//  2. A run that finds no matching profile files - Run stats each
 //     path and `continue`s on ENOENT before ever entering apply* - can
 //     complete without shelling out to brew, which matters on machines
 //     where brew is unavailable or transiently broken.

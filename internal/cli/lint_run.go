@@ -11,14 +11,15 @@ import (
 	"github.com/jmcampanini/brewkit/internal/lint"
 	"github.com/jmcampanini/brewkit/internal/parse"
 	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/ui"
 )
 
-func profileSelectionFlagChanged() bool {
-	if configFlagSet == nil {
+func (app *commandContext) profileSelectionFlagChanged() bool {
+	if app.configFlagSet == nil {
 		return false
 	}
 	for _, name := range []string{"profiles", "profile"} {
-		flag := configFlagSet.Lookup(name)
+		flag := app.configFlagSet.Lookup(name)
 		if flag != nil && flag.Changed {
 			return true
 		}
@@ -26,8 +27,8 @@ func profileSelectionFlagChanged() bool {
 	return false
 }
 
-func runLint(_ context.Context) error {
-	cfg, _, err := config.LoadWithReport(flags.configPath, configFlagSet)
+func (app *commandContext) runLint(_ context.Context) error {
+	cfg, _, err := config.LoadWithReport(app.flags.configPath, app.configFlagSet)
 	if err != nil {
 		return err
 	}
@@ -35,7 +36,7 @@ func runLint(_ context.Context) error {
 	// --profiles/--profile narrows the scan; otherwise lint scans every
 	// discoverable profile in the directory regardless of what's currently active.
 	var profiles []string
-	if profileSelectionFlagChanged() {
+	if app.profileSelectionFlagChanged() {
 		profiles = append([]string(nil), cfg.Profiles...)
 	} else {
 		discovered, err := profile.Discover(cfg.Dir)
@@ -64,9 +65,9 @@ func runLint(_ context.Context) error {
 		}
 	}
 
-	w := stdoutWriter()
+	w := ui.NewLinePrefixWriter(os.Stdout, app.flags.outputPrefix)
 	if len(violations) == 0 {
-		if !flags.quiet {
+		if !app.flags.quiet {
 			if _, err := fmt.Fprintln(w, "no violations"); err != nil {
 				return err
 			}
@@ -78,13 +79,13 @@ func runLint(_ context.Context) error {
 		if _, err := fmt.Fprintf(w, "%s:%d: [%s] %s\n", v.Path, v.Line, v.RuleID, v.Message); err != nil {
 			return err
 		}
-		if flags.verbose && !flags.quiet && v.Raw != "" {
+		if app.flags.verbose && !app.flags.quiet && v.Raw != "" {
 			if _, err := fmt.Fprintf(w, "      %s\n", v.Raw); err != nil {
 				return err
 			}
 		}
 	}
-	if !flags.quiet {
+	if !app.flags.quiet {
 		if _, err := fmt.Fprintf(w, "Summary: %d violation(s)\n", len(violations)); err != nil {
 			return err
 		}

@@ -2,9 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/jmcampanini/brewkit/internal/docs"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +34,7 @@ func TestExitCodesTopicPrintsSameHelpFromBothEntryPoints(t *testing.T) {
 func TestEveryApplicationCommandHasWrappedLongHelp(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
-	root := newRootCmd()
+	root := newRootCmd(testApp)
 
 	walkApplicationCommands(root, func(command *cobra.Command) {
 		if strings.TrimSpace(command.Long) == "" {
@@ -55,7 +58,7 @@ func TestEveryApplicationCommandHasWrappedLongHelp(t *testing.T) {
 func TestEveryApplicationCommandDeclaresGrammar(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
-	root := newRootCmd()
+	root := newRootCmd(testApp)
 
 	walkApplicationCommands(root, func(command *cobra.Command) {
 		if command != root && command.Args == nil {
@@ -86,10 +89,125 @@ func executeForTest(t *testing.T, args ...string) (stdout string, stderr string,
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	root := newRootCmd()
+	root := newRootCmd(testApp)
 	root.SetArgs(args)
 	root.SetOut(&out)
 	root.SetErr(&errOut)
 	err = root.Execute()
 	return out.String(), errOut.String(), err
+}
+
+func TestExecuteReturnsStatusAndPrintsErrors(t *testing.T) {
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+	t.Chdir(t.TempDir())
+	for _, tt := range []struct {
+		name        string
+		args        []string
+		status      int
+		output      string
+		errorOutput string
+	}{
+		{name: "success", args: []string{"docs"}, output: docs.Manual()},
+		{name: "failure", args: []string{"--output-prefix", "prefix: ", "brew"}, status: 1,
+			errorOutput: "prefix: brewkit: no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles/--profile, env_profiles, or add a *file.local\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("BREWKIT_PROFILES", "")
+			os.Args = append([]string{"brewkit"}, tt.args...)
+			var status int
+			out, errOut := captureOutput(t, func() { status = Execute() })
+			if status != tt.status || out != tt.output || errOut != tt.errorOutput {
+				t.Fatalf("Execute() = (%d, %q, %q), want (%d, %q, %q)", status, out, errOut, tt.status, tt.output, tt.errorOutput)
+			}
+		})
+	}
+}
+
+func TestRootProfilesFlagsRegistered(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	root := newRootCmd(testApp)
+	if root.PersistentFlags().Lookup("profiles") == nil {
+		t.Fatal("root should register --profiles")
+	}
+	if root.PersistentFlags().Lookup("profile") == nil {
+		t.Fatal("root should register singular --profile")
+	}
+	if root.PersistentFlags().Lookup("output-prefix") == nil {
+		t.Fatal("root should register --output-prefix")
+	}
+}
+
+func TestOutputPrefixDoesNotPrefixHelpOrVersion(t *testing.T) {
+	const outputPrefix = "prefix: "
+
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "help", args: []string{"--output-prefix", outputPrefix, "--help"}},
+		{name: "version", args: []string{"--output-prefix", outputPrefix, "--version"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			defer resetFlags()
+
+			root := newRootCmd(testApp)
+			var out, errOut bytes.Buffer
+			root.SetArgs(tt.args)
+			root.SetOut(&out)
+			root.SetErr(&errOut)
+
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			gotOut := out.String()
+			if gotOut == "" {
+				t.Fatal("expected command output")
+			}
+			if strings.Contains(gotOut, outputPrefix) {
+				t.Fatalf("help/version output should not be prefixed; got %q", gotOut)
+			}
+			if errOut.Len() != 0 {
+				t.Fatalf("expected no stderr output, got %q", errOut.String())
+			}
+		})
+	}
+}
+
+func TestPrintError_OutputPrefix(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	testApp.flags.outputPrefix = "  "
+	_, errOut := captureOutput(t, func() {
+		printError(errors.New("first\nsecond"), testApp.flags.outputPrefix)
+	})
+
+	want := "  brewkit: first\n  second\n"
+	if errOut != want {
+		t.Errorf("unexpected prefixed top-level error:\nwant: %q\ngot:  %q", want, errOut)
+	}
+}
+
+func TestRootRejectsQuietAndVerboseTogether(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+
+	root := newRootCmd(testApp)
+	root.SetArgs([]string{"--quiet", "--verbose"})
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected quiet/verbose mutual exclusion error")
+	}
+	for _, want := range []string{"quiet", "verbose", "none of the others can be"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected native mutual exclusion error to contain %q, got: %v", want, err)
+		}
+	}
 }

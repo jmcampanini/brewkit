@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-func newDocsCmd() *cobra.Command {
+func newDocsCmd(app *commandContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "docs",
 		Short: "Print the embedded brewkit manual as plain text",
@@ -15,7 +15,7 @@ command runs. --quiet does not suppress the manual, and --output-prefix
 prefixes each of its lines.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDocs(cmd.Context())
+			return app.runDocs(cmd.Context())
 		},
 	}
 }

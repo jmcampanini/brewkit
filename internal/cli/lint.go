@@ -1,8 +1,11 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/jmcampanini/brewkit/internal/docs"
+	"github.com/spf13/cobra"
+)
 
-func newLintCmd() *cobra.Command {
+func newLintCmd(app *commandContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lint",
 		Short: "Validate profile files (sort order + comment style)",
@@ -15,7 +18,7 @@ files are checked; profiles in brewkit.toml, BREWKIT_PROFILES,
 env_profiles, and the automatic local profile never narrow the scan.
 Missing files are skipped and no brew command runs.
 
-` + configDiscoveryHelp + `
+` + docs.ConfigDiscoveryHelp + `
 
 Rules: sort-order (entries within a section, delimited by blank lines,
 are in byte order by name), trailing-description (Brewfile, Caskfile, and
@@ -35,7 +38,7 @@ stderr. --verbose prints the offending line under each violation.
 --dry-run has no effect.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runLint(cmd.Context())
+			return app.runLint(cmd.Context())
 		},
 	}
 }

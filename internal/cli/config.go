@@ -1,8 +1,11 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/jmcampanini/brewkit/internal/docs"
+	"github.com/spf13/cobra"
+)
 
-func newConfigCmd() *cobra.Command {
+func newConfigCmd(app *commandContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "config",
 		Short: "Print loaded config, provenance, and effective runtime values",
@@ -18,7 +21,7 @@ every command accepts. Only profiles has an environment variable and
 flags; dir, env_profiles, and fail_fast come from the file alone. An
 unknown key in brewkit.toml is an error, and dir must not be empty.
 
-` + configDiscoveryHelp + `
+` + docs.ConfigDiscoveryHelp + `
 
 Keys: dir (directory holding the profile files), profiles (list of
 profile names), env_profiles (name of an environment variable whose
@@ -26,7 +29,7 @@ comma-separated value appends to profiles), and fail_fast (stop at the
 first failing entry when true; attempt every entry and report all
 failures at the end when false).
 
-` + profileSelectionHelp + `
+` + docs.ProfileSelectionHelp + `
 
 The TOML section reloads as brewkit.toml. The '# provenance:' block lists
 each field as a commented, tab-separated path, value, and source, where
@@ -38,7 +41,7 @@ redacted; the configuration holds no secret fields. --quiet does not
 suppress the report and --dry-run has no effect.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfig(cmd.Context())
+			return app.runConfig(cmd.Context())
 		},
 	}
 }

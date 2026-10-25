@@ -2,8 +2,12 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/jmcampanini/brewkit/internal/config"
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/docs"
+	"github.com/jmcampanini/brewkit/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -17,10 +21,12 @@ type globalFlags struct {
 	hideUnchanged bool
 }
 
-var flags globalFlags
-var configFlagSet *pflag.FlagSet
+type commandContext struct {
+	configFlagSet *pflag.FlagSet
+	flags         globalFlags
+}
 
-func newRootCmd() *cobra.Command {
+func newRootCmd(app *commandContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "brewkit",
 		Short: "Multi-profile Homebrew manager",
@@ -39,7 +45,7 @@ that order. 'brewkit lint' checks the files' style, 'brewkit config'
 prints the configuration in effect, and 'brewkit docs' prints the
 embedded manual.
 
-` + configDiscoveryHelp + `
+` + docs.ConfigDiscoveryHelp + `
 
 The global flags apply to every command. --dry-run makes the apply
 commands report what they would change without running any brew command
@@ -82,25 +88,25 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 	}
 
 	persistentFlags := root.PersistentFlags()
-	persistentFlags.StringVar(&flags.configPath, "config", "", "config file (default ./brewkit.toml when present)")
+	persistentFlags.StringVar(&app.flags.configPath, "config", "", "config file (default ./brewkit.toml when present)")
 	if err := config.RegisterFlags(persistentFlags); err != nil {
 		panic(err)
 	}
-	configFlagSet = persistentFlags
-	persistentFlags.BoolVar(&flags.dryRun, "dry-run", false, "compute changes without applying them")
-	persistentFlags.BoolVarP(&flags.verbose, "verbose", "v", false, "add brew output and lint line text; not with -q")
-	persistentFlags.BoolVarP(&flags.quiet, "quiet", "q", false, "errors only (apply commands, lint); not with -v")
-	persistentFlags.StringVar(&flags.outputPrefix, "output-prefix", "", "prefix output lines (not help or version)")
+	app.configFlagSet = persistentFlags
+	persistentFlags.BoolVar(&app.flags.dryRun, "dry-run", false, "compute changes without applying them")
+	persistentFlags.BoolVarP(&app.flags.verbose, "verbose", "v", false, "add brew output and lint line text; not with -q")
+	persistentFlags.BoolVarP(&app.flags.quiet, "quiet", "q", false, "errors only (apply commands, lint); not with -v")
+	persistentFlags.StringVar(&app.flags.outputPrefix, "output-prefix", "", "prefix output lines (not help or version)")
 	root.MarkFlagsMutuallyExclusive("quiet", "verbose")
 
-	root.AddCommand(newTapCmd())
-	root.AddCommand(newBrewCmd())
-	root.AddCommand(newHeadCmd())
-	root.AddCommand(newCaskCmd())
-	root.AddCommand(newLintCmd())
-	root.AddCommand(newConfigCmd())
-	root.AddCommand(newDocsCmd())
-	root.AddCommand(newExitCodesTopic())
+	root.AddCommand(newTapCmd(app))
+	root.AddCommand(newBrewCmd(app))
+	root.AddCommand(newHeadCmd(app))
+	root.AddCommand(newCaskCmd(app))
+	root.AddCommand(newLintCmd(app))
+	root.AddCommand(newConfigCmd(app))
+	root.AddCommand(newDocsCmd(app))
+	root.AddCommand(newExitCodesTopic(app))
 
 	// Cobra registers --help and --version inside Execute, after Find has
 	// already stripped flags to locate the subcommand. Without the flags
@@ -113,39 +119,16 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 	return root
 }
 
-// applyCommandSpec is the per-kind part of an apply command. newApplyCmd
-// appends the operand, profile, and output contract every apply command
-// shares to kindHelp.
-type applyCommandSpec struct {
-	example  string
-	kind     profile.Kind
-	kindHelp string
-	short    string
-	use      string
-}
-
-func newApplyCmd(spec applyCommandSpec) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   spec.use,
-		Short: spec.short,
-		Long: spec.kindHelp + `
-
-` + applyOperandHelp + `
-
-` + profileSelectionHelp + `
-
-` + applyOutputHelp,
-		Example: spec.example,
-		Args:    cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApply(cmd.Context(), spec.kind, args)
-		},
+// Execute runs the command and returns its process exit status.
+func Execute() int {
+	app := &commandContext{}
+	if err := newRootCmd(app).Execute(); err != nil {
+		printError(err, app.flags.outputPrefix)
+		return 1
 	}
-	cmd.Flags().BoolVar(&flags.hideUnchanged, "hide-unchanged", false, "hide lines for entries already satisfied")
-	return cmd
+	return 0
 }
 
-// Execute is the entrypoint invoked from cmd/brewkit/main.go.
-func Execute() error {
-	return newRootCmd().Execute()
+func printError(err error, prefix string) {
+	_, _ = fmt.Fprintln(ui.NewLinePrefixWriter(os.Stderr, prefix), "brewkit:", err)
 }
