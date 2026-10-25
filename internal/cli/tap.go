@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newTapCmd() *cobra.Command {
-	return newApplyCmd(applyCommandSpec{
+func newTapCmd(app *commandContext) *cobra.Command {
+	cmd := newApplyCmd(app, applyCommandSpec{
 		use:   "tap [TAP]",
 		short: "Apply Tapfile entries for active profiles",
 		kind:  profile.KindTap,
@@ -41,4 +41,6 @@ changing either. Removing an entry never untaps it or revokes trust.`,
   brewkit tap --dry-run
   brewkit tap jmcampanini/overlay`,
 	})
+	cmd.Flags().BoolVar(&app.flags.hideUnchanged, "hide-unchanged", false, "hide lines for entries already satisfied")
+	return cmd
 }

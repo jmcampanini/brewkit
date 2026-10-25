@@ -11,7 +11,7 @@ class Brewkit < Formula
       -s -w
       -X github.com/jmcampanini/brewkit/internal/cli.Version=#{version}
     ]
-    system "go", "build", "-buildvcs=false", *std_go_args(output: bin/"brewkit", ldflags:), "./cmd/brewkit"
+    system "go", "build", "-buildvcs=false", *std_go_args(output: bin/"brewkit", ldflags:), "."
     generate_completions_from_executable(bin/"brewkit", "completion")
   end
 

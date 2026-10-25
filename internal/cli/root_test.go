@@ -2,8 +2,11 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/jmcampanini/brewkit/internal/docs"
 
 	"github.com/spf13/cobra"
 )
@@ -31,7 +34,7 @@ func TestExitCodesTopicPrintsSameHelpFromBothEntryPoints(t *testing.T) {
 func TestEveryApplicationCommandHasWrappedLongHelp(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
-	root := newRootCmd()
+	root := newRootCmd(testApp)
 
 	walkApplicationCommands(root, func(command *cobra.Command) {
 		if strings.TrimSpace(command.Long) == "" {
@@ -55,7 +58,7 @@ func TestEveryApplicationCommandHasWrappedLongHelp(t *testing.T) {
 func TestEveryApplicationCommandDeclaresGrammar(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
-	root := newRootCmd()
+	root := newRootCmd(testApp)
 
 	walkApplicationCommands(root, func(command *cobra.Command) {
 		if command != root && command.Args == nil {
@@ -86,10 +89,37 @@ func executeForTest(t *testing.T, args ...string) (stdout string, stderr string,
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	root := newRootCmd()
+	root := newRootCmd(testApp)
 	root.SetArgs(args)
 	root.SetOut(&out)
 	root.SetErr(&errOut)
 	err = root.Execute()
 	return out.String(), errOut.String(), err
+}
+
+func TestExecuteReturnsStatusAndPrintsErrors(t *testing.T) {
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+	t.Chdir(t.TempDir())
+	for _, tt := range []struct {
+		name        string
+		args        []string
+		status      int
+		output      string
+		errorOutput string
+	}{
+		{name: "success", args: []string{"docs"}, output: docs.Manual()},
+		{name: "failure", args: []string{"--output-prefix", "prefix: ", "brew"}, status: 1,
+			errorOutput: "prefix: brewkit: no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles/--profile, env_profiles, or add a *file.local\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("BREWKIT_PROFILES", "")
+			os.Args = append([]string{"brewkit"}, tt.args...)
+			var status int
+			out, errOut := captureOutput(t, func() { status = Execute() })
+			if status != tt.status || out != tt.output || errOut != tt.errorOutput {
+				t.Fatalf("Execute() = (%d, %q, %q), want (%d, %q, %q)", status, out, errOut, tt.status, tt.output, tt.errorOutput)
+			}
+		})
+	}
 }
