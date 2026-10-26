@@ -1,17 +1,17 @@
 package cli
 
 import (
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/spf13/cobra"
 )
 
 func newTapCmd(app *commandContext) *cobra.Command {
 	cmd := newApplyCmd(app, applyCommandSpec{
 		use:   "tap [TAP]",
-		short: "Apply Tapfile entries for active profiles",
-		kind:  profile.KindTap,
-		kindHelp: `Register and trust every tap listed in Tapfile.<profile> for the active
-profiles. Listing a tap authorizes trust for the whole tap, including its
+		short: "Apply Tapfile entries for the layers in order",
+		kind:  layer.KindTap,
+		kindHelp: `Register and trust every tap listed in the Tapfile of each layer in
+order. Listing a tap authorizes trust for the whole tap, including its
 formulae, casks, and commands. A line is '<tap>' or '<tap> <url>'; the
 optional URL is used when trusting and registering a missing tap.
 

@@ -8,15 +8,16 @@ import (
 func newLintCmd(app *commandContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lint",
-		Short: "Validate profile files (sort order + comment style)",
-		Long: `Check the profile files for style violations and print each one on
-stdout as '<path>:<line>: [<rule>] <message>'. With neither --profiles
-nor --profile, every Tapfile, Brewfile, Headfile, and Caskfile in dir
-whose suffix is a profile name (letters, digits, '_', and '-'), including
-local, is checked. With --profiles or --profile only the named profiles'
-files are checked; profiles in brewkit.toml, BREWKIT_PROFILES,
-env_profiles, and the automatic local profile never narrow the scan.
-Missing files are skipped and no brew command runs.
+		Short: "Validate layer files (sort order + comment style)",
+		Long: `Check the layer files for style violations and print each one on
+stdout as '<path>:<line>: [<rule>] <message>'. With neither --layers nor
+--layer, every Tapfile, Brewfile, Headfile, and Caskfile in dir whose
+suffix is a valid layer name (lowercase letters, digits, and single
+hyphens between groups), including the local files, is checked. With
+--layers or --layer only the effective layers' files are checked: the
+flag values plus the env_layers additions, after deduplication, and
+never the local files. Missing files are skipped and no brew command
+runs.
 
 ` + docs.ConfigDiscoveryHelp + `
 

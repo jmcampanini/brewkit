@@ -4,27 +4,34 @@ package docs
 // contract text cannot drift between commands. Fragments carry no leading or
 // trailing newline; compose them with explicit separators.
 
-// ConfigDiscoveryHelp describes how brewkit.toml and the profile directory
+// ConfigDiscoveryHelp describes how brewkit.toml and the layer directory
 // are located; the root, config, and lint commands include it.
 const ConfigDiscoveryHelp = `brewkit reads brewkit.toml from the current directory when it exists and
 uses the built-in defaults when it does not. --config PATH reads PATH
-instead and fails when PATH does not exist. Profile files are looked up
-in the directory named by dir (default '.'), resolved against the current
-working directory rather than the location of brewkit.toml.`
+instead and fails when PATH is empty or does not exist. Layer files are
+looked up in the directory named by dir (default '.'), resolved against
+the current working directory rather than the location of brewkit.toml.`
 
-// ProfileSelectionHelp describes how the active profiles are chosen; the
+// LayerSelectionHelp describes how the layers are chosen and ordered; the
 // config and apply commands include it.
-const ProfileSelectionHelp = `The active profiles come from the highest layer that sets them: the flags
---profiles LIST (comma-separated) and --profile NAME (repeatable), which
-combine into one list, override BREWKIT_PROFILES (comma-separated), which
-overrides profiles in brewkit.toml. When env_profiles names an environment
-variable that is set, its comma-separated value is appended. Environment
-and flag values are split on commas and trimmed. Duplicates are dropped
-keeping the first occurrence, and an empty name is an error except in
-the env_profiles variable, where blanks are dropped. The name local is
-reserved: listing it is an error, and it is appended last whenever a
-Tapfile.local, Brewfile.local, Headfile.local, or Caskfile.local exists
-in dir. 'brewkit config' prints the resulting effective_profiles.`
+const LayerSelectionHelp = `The layers come from the highest-priority input that sets them: the
+flags --layers LIST (comma-separated) and --layer NAME (repeatable),
+which combine into one list, replace BREWKIT_LAYERS (comma-separated),
+which replaces layers in brewkit.toml. --layers and BREWKIT_LAYERS are
+split on commas, --layer takes one name, and every flag and environment
+item is trimmed; --layers "" or an empty BREWKIT_LAYERS clears the
+list. Each environment variable named in env_layers is then read in
+order; its value is split on commas, trimmed, and appended with blank
+items dropped. Duplicates are dropped keeping the last occurrence, so
+work,laptop,work selects laptop then work. A layer name is 1 to 64
+characters of lowercase letters and digits in groups separated by
+single hyphens, such as work or work-laptop; any other name, including
+a blank item, is an error. The names base and local
+are reserved and cannot be selected; local is the *file.local files,
+which apply whenever one of them exists in dir. The apply commands walk
+the selected layers in order, then local; a selection with no layers
+still applies local. 'brewkit config' prints the resulting
+effective_layers and layer_order.`
 
 // BrewStateHelp describes the Homebrew state queries; the brew and cask
 // commands include it.
@@ -38,16 +45,16 @@ with 'brew list --formula --versions', 'brew list --cask
 // command accepts.
 const ApplyOperandHelp = `An optional operand limits the run to one entry: it must equal an entry's
 full name or the part after its last '/', and every matching entry across
-the active profiles' files is applied. When nothing matches, nothing is
-applied and the command fails. Without an operand every entry is applied,
-and a profile that has no file of this kind is reported as skipped.`
+the layers' files is applied. When nothing matches, nothing is applied
+and the command fails. Without an operand every entry is applied, and a
+layer that has no file of this kind is reported as skipped.`
 
 // ApplyOutputHelp describes the per-entry output, summary, and dry-run
 // contract every apply command shares.
-const ApplyOutputHelp = `Profiles are processed in order and entries in file order. Each entry
+const ApplyOutputHelp = `Layers are processed in order and entries in file order. Each entry
 prints one line on stdout: '+ name' for an install, tap, or trust change,
 '↑ name old → new' for an upgrade, and '✓ name' when already satisfied.
-A profile with no file of this kind prints '⊘ profile: no Brewfile,
+A layer with no file of this kind prints '⊘ layer: no Brewfile,
 skipping' (or Tapfile, Headfile, Caskfile).
 A failure prints '✗ name: reason' on stderr followed by
 brew's captured output, whatever the verbosity, and a line that is not a
@@ -61,7 +68,7 @@ both terminals, a progress line shows on stderr while brew runs and is
 erased afterwards.
 
 With --dry-run no brew command that changes the system runs. Lines that
-would change carry a '(dry-run)' suffix, and a later profile that lists
+would change carry a '(dry-run)' suffix, and a later layer that lists
 the same entry sees it as already satisfied. The state and info queries
 still run. fail_fast (default true) stops at the first failure; when
 false every entry is attempted and all failures are listed at the end.

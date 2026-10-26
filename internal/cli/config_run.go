@@ -4,29 +4,20 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/config"
 	"github.com/jmcampanini/brewkit/internal/ui"
 	"github.com/jmcampanini/go-config-loader/configreporter"
 )
 
-var filepathAbs = filepath.Abs
-
-func (app *commandContext) runConfig(_ context.Context) error {
-	cfg, report, profiles, err := profile.LoadConfig(app.flags.configPath, app.configFlagSet)
+func (app *commandContext) runConfig(_ context.Context, provenance bool) error {
+	effective, err := config.Load(app.configFlagSet)
 	if err != nil {
 		return err
 	}
 
-	effectiveDir, err := filepathAbs(cfg.Dir)
-	if err != nil {
-		return fmt.Errorf("resolve effective dir %q: %w", cfg.Dir, err)
-	}
-
-	reporter := configreporter.New(cfg, report)
+	reporter := configreporter.New(effective.Config, effective.Report)
 	out, err := reporter.TOML()
 	if err != nil {
 		return err
@@ -42,6 +33,22 @@ func (app *commandContext) runConfig(_ context.Context) error {
 		}
 	}
 
+	if _, err := fmt.Fprintln(w, "# effective:"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "# effective_dir = %q\n", effective.Dir); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "# effective_layers = [%s]\n", quoteList(effective.Layers)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "# layer_order = [%s]\n", quoteList(effective.LayerOrder)); err != nil {
+		return err
+	}
+	if !provenance {
+		return nil
+	}
+
 	if _, err := fmt.Fprintln(w, "# provenance:"); err != nil {
 		return err
 	}
@@ -54,25 +61,8 @@ func (app *commandContext) runConfig(_ context.Context) error {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(w, "# loaded_files = [%s]\n", quoteList(report.LoadedFiles)); err != nil {
-		return err
-	}
-
-	if _, err := fmt.Fprintln(w, "# effective:"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "# effective_dir = %q\n", filepath.Clean(effectiveDir)); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "# effective_profiles = [%s]\n", quoteList(profiles)); err != nil {
-		return err
-	}
-	if slices.Contains(profiles, profile.LocalName) {
-		if _, err := fmt.Fprintln(w, "# note: 'local' profile auto-appended (*file.local present)"); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err = fmt.Fprintf(w, "# loaded_files = [%s]\n", quoteList(effective.Report.LoadedFiles))
+	return err
 }
 
 func quoteList(values []string) string {

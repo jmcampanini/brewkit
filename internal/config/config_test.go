@@ -15,10 +15,10 @@ import (
 func TestDefaults(t *testing.T) {
 	got := Defaults()
 	want := Config{
-		Dir:         ".",
-		Profiles:    []string{},
-		EnvProfiles: "",
-		FailFast:    true,
+		Dir:       ".",
+		Layers:    []string{},
+		EnvLayers: []string{},
+		FailFast:  true,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Defaults() = %+v, want %+v", got, want)
@@ -26,304 +26,313 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestLoad_MissingImplicitFallsBackToDefaults(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
+	unsetEnv(t, "BREWKIT_LAYERS")
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	got, report, err := LoadWithReport("", nil)
+	got, err := Load(nil)
 	if err != nil {
-		t.Fatalf("LoadWithReport(\"\") returned err: %v", err)
+		t.Fatalf("Load() returned err: %v", err)
 	}
-	if len(report.LoadedFiles) != 0 {
-		t.Errorf("LoadedFiles = %v, want none", report.LoadedFiles)
+	if len(got.Report.LoadedFiles) != 0 {
+		t.Errorf("LoadedFiles = %v, want none", got.Report.LoadedFiles)
 	}
-	if !reflect.DeepEqual(got, Defaults()) {
-		t.Errorf("config = %+v, want defaults %+v", got, Defaults())
+	if !reflect.DeepEqual(got.Config, Defaults()) {
+		t.Errorf("config = %+v, want defaults %+v", got.Config, Defaults())
 	}
-	if report.Updates["profiles"] != configloader.SourceDefault {
-		t.Errorf("profiles source = %q, want default", report.Updates["profiles"])
+	if got.Report.Updates["layers"] != configloader.SourceDefault {
+		t.Errorf("layers source = %q, want default", got.Report.Updates["layers"])
 	}
-}
-
-func TestLoad_ImplicitConfigDirectoryErrors(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	t.Chdir(dir)
-	if err := os.Mkdir("brewkit.toml", 0o755); err != nil {
-		t.Fatal(err)
+	if want := mustAbs(t, dir); got.Dir != want {
+		t.Errorf("Dir = %q, want %q", got.Dir, want)
 	}
-
-	_, _, err := LoadWithReport("", nil)
-	if err == nil {
-		t.Fatal("LoadWithReport should error when implicit brewkit.toml is a directory")
-	}
-	if !strings.Contains(err.Error(), "directory") {
-		t.Fatalf("error should mention directory, got: %v", err)
+	if len(got.Layers) != 0 || len(got.LayerOrder) != 0 {
+		t.Errorf("Layers, LayerOrder = %v, %v, want both empty", got.Layers, got.LayerOrder)
 	}
 }
 
-func TestLoad_MissingExplicitErrors(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	if _, _, err := LoadWithReport("/nonexistent/brewkit.toml", nil); err == nil {
-		t.Fatal("LoadWithReport with nonexistent explicit path should error")
-	}
-}
+func TestLoad_ConfigFileErrors(t *testing.T) {
+	unsetEnv(t, "BREWKIT_LAYERS")
+	for _, tt := range []struct {
+		name    string
+		setup   func(t *testing.T) *pflag.FlagSet
+		wantErr string
+	}{
+		{
+			name: "implicit config is a directory",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				t.Chdir(t.TempDir())
+				if err := os.Mkdir("brewkit.toml", 0o755); err != nil {
+					t.Fatal(err)
+				}
+				return nil
+			},
+			wantErr: "directory",
+		},
+		{
+			name: "explicit config is missing",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				return newTestFlagSet(t, "--config", "/nonexistent/brewkit.toml")
+			},
+			wantErr: "brewkit.toml",
+		},
+		{
+			name: "explicit config is empty",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				return newTestFlagSet(t, "--config", "")
+			},
+			wantErr: "--config: path must not be empty",
+		},
+		{
+			name: "explicit config is a directory",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				path := filepath.Join(t.TempDir(), "brewkit.toml")
+				if err := os.Mkdir(path, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				return newTestFlagSet(t, "--config", path)
+			},
+			wantErr: "directory",
+		},
+		{
+			name: "malformed toml",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				return newTestFlagSet(t, "--config", writeConfig(t, "dir = "))
+			},
+			wantErr: "",
+		},
+		{
+			name: "unknown key",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				return newTestFlagSet(t, "--config", writeConfig(t, "verbose = true\n"))
+			},
+			wantErr: "unknown keys: verbose",
+		},
+		{
+			name: "empty dir",
+			setup: func(t *testing.T) *pflag.FlagSet {
+				return newTestFlagSet(t, "--config", writeConfig(t, `dir = ""`))
+			},
+			wantErr: "dir must not be empty",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := tt.setup(t)
 
-func TestLoad_ExplicitConfigDirectoryErrors(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := os.Mkdir(path, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err := LoadWithReport(path, nil)
-	if err == nil {
-		t.Fatal("LoadWithReport should error when explicit config is a directory")
-	}
-	if !strings.Contains(err.Error(), "directory") {
-		t.Fatalf("error should mention directory, got: %v", err)
+			_, err := Load(flags)
+			if err == nil {
+				t.Fatal("Load() = nil error, want error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load() error = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 
 func TestLoad_ParsesFile(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	contents := []byte(`
+	unsetEnv(t, "BREWKIT_LAYERS")
+	path := writeConfig(t, `
 dir = "./homebrew"
-profiles = ["common", "work"]
-env_profiles = "DOTFILES_PROFILES"
+layers = ["common", "work"]
+env_layers = ["DOTFILES_LAYERS"]
 fail_fast = false
 `)
-	if err := writeFile(t, path, contents); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, report, err := LoadWithReport(path, nil)
-	if err != nil {
-		t.Fatalf("LoadWithReport returned err: %v", err)
-	}
-	if cfg.Dir != "./homebrew" {
-		t.Errorf("Dir = %q, want raw ./homebrew", cfg.Dir)
-	}
-	if !reflect.DeepEqual(cfg.Profiles, []string{"common", "work"}) {
-		t.Errorf("Profiles = %v, want [common work]", cfg.Profiles)
-	}
-	if cfg.EnvProfiles != "DOTFILES_PROFILES" {
-		t.Errorf("EnvProfiles = %q, want DOTFILES_PROFILES", cfg.EnvProfiles)
-	}
-	if cfg.FailFast {
-		t.Errorf("FailFast = true, want false")
-	}
-	if !reflect.DeepEqual(report.LoadedFiles, []string{path}) {
-		t.Errorf("LoadedFiles = %v, want [%s]", report.LoadedFiles, path)
-	}
-	if report.Updates["profiles"] != path {
-		t.Errorf("profiles source = %q, want file path", report.Updates["profiles"])
-	}
-}
-
-func TestLoad_EmptyDirErrors(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`dir = ""`)); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err := LoadWithReport(path, nil)
-	if err == nil {
-		t.Fatal("LoadWithReport should reject empty dir")
-	}
-	if !strings.Contains(err.Error(), "dir must not be empty") {
-		t.Fatalf("error should mention empty dir, got: %v", err)
-	}
-}
-
-func TestLoad_PartialFileKeepsDefaults(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`profiles = ["work"]`)); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, _, err := LoadWithReport(path, nil)
-	if err != nil {
-		t.Fatalf("LoadWithReport returned err: %v", err)
-	}
-	if cfg.Dir != "." {
-		t.Errorf("Dir = %q, want default . (dir is not anchored to config path)", cfg.Dir)
-	}
-	if cfg.EnvProfiles != "" {
-		t.Errorf("EnvProfiles = %q, want default empty", cfg.EnvProfiles)
-	}
-	if !cfg.FailFast {
-		t.Errorf("FailFast = false, want default true")
-	}
-	if !reflect.DeepEqual(cfg.Profiles, []string{"work"}) {
-		t.Errorf("Profiles = %v, want [work]", cfg.Profiles)
-	}
-}
-
-func TestLoad_MalformedTomlErrors(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte("dir = ")); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := LoadWithReport(path, nil); err == nil {
-		t.Fatal("LoadWithReport with malformed TOML should error")
-	}
-}
-
-func TestLoad_UnknownTomlKeysError(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte("profiles_env = \"OLD\"\n")); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err := LoadWithReport(path, nil)
-	if err == nil {
-		t.Fatal("LoadWithReport should reject unknown TOML keys")
-	}
-	if !strings.Contains(err.Error(), "unknown") || !strings.Contains(err.Error(), "profiles_env") {
-		t.Fatalf("error should mention unknown profiles_env, got: %v", err)
-	}
-}
-
-func TestLoad_RelativeDirNotResolvedAgainstConfigPath(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	configDir := t.TempDir()
-	path := filepath.Join(configDir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`dir = "homebrew"`)); err != nil {
-		t.Fatal(err)
-	}
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 
-	cfg, _, err := LoadWithReport(path, nil)
+	got, err := Load(newTestFlagSet(t, "--config", path))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Load() returned err: %v", err)
 	}
-	if cfg.Dir != "homebrew" {
-		t.Errorf("Dir = %q, want raw relative homebrew", cfg.Dir)
+	want := Config{
+		Dir:       "./homebrew",
+		Layers:    []string{"common", "work"},
+		EnvLayers: []string{"DOTFILES_LAYERS"},
+		FailFast:  false,
+	}
+	if !reflect.DeepEqual(got.Config, want) {
+		t.Errorf("Config = %+v, want %+v", got.Config, want)
+	}
+	if wantDir := filepath.Join(mustAbs(t, cwd), "homebrew"); got.Dir != wantDir {
+		t.Errorf("Dir = %q, want %q (relative to the working directory, not the config file)", got.Dir, wantDir)
+	}
+	if !reflect.DeepEqual(got.Report.LoadedFiles, []string{path}) {
+		t.Errorf("LoadedFiles = %v, want [%s]", got.Report.LoadedFiles, path)
+	}
+	if got.Report.Updates["layers"] != path {
+		t.Errorf("layers source = %q, want file path", got.Report.Updates["layers"])
 	}
 }
 
-func TestLoad_EmptyFileLoadsDefaults(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte("")); err != nil {
-		t.Fatal(err)
-	}
-	cfg, report, err := LoadWithReport(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(cfg, Defaults()) {
-		t.Errorf("config = %+v, want defaults %+v", cfg, Defaults())
-	}
-	if !reflect.DeepEqual(report.LoadedFiles, []string{path}) {
-		t.Errorf("LoadedFiles = %v, want [%s]", report.LoadedFiles, path)
+func TestLoad_FileContentsKeepDefaults(t *testing.T) {
+	unsetEnv(t, "BREWKIT_LAYERS")
+	for _, tt := range []struct {
+		name     string
+		contents string
+		want     func(Config) Config
+	}{
+		{name: "empty file", contents: "", want: func(c Config) Config { return c }},
+		{name: "comment only", contents: "# disabled, no keys\n", want: func(c Config) Config { return c }},
+		{name: "partial file", contents: `layers = ["work"]`, want: func(c Config) Config {
+			c.Layers = []string{"work"}
+			return c
+		}},
+		{name: "absolute dir", contents: `dir = "/abs/path"`, want: func(c Config) Config {
+			c.Dir = "/abs/path"
+			return c
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConfig(t, tt.contents)
+
+			got, err := Load(newTestFlagSet(t, "--config", path))
+			if err != nil {
+				t.Fatalf("Load() returned err: %v", err)
+			}
+			if want := tt.want(Defaults()); !reflect.DeepEqual(got.Config, want) {
+				t.Errorf("Config = %+v, want %+v", got.Config, want)
+			}
+			if !reflect.DeepEqual(got.Report.LoadedFiles, []string{path}) {
+				t.Errorf("LoadedFiles = %v, want [%s]", got.Report.LoadedFiles, path)
+			}
+		})
 	}
 }
 
-func TestLoad_WhitespaceOnlyFileLoadsDefaults(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte("# disabled, no keys\n")); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _, err := LoadWithReport(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(cfg, Defaults()) {
-		t.Errorf("config = %+v, want defaults %+v", cfg, Defaults())
+func TestLoad_LayersPrecedence(t *testing.T) {
+	path := writeConfig(t, `layers = ["file"]`)
+	for _, tt := range []struct {
+		name       string
+		env        string
+		args       []string
+		wantLayers []string
+		wantSource string
+	}{
+		{name: "env replaces file", env: "work, personal", wantLayers: []string{"work", "personal"}, wantSource: configloader.SourceEnv},
+		{name: "empty env clears file", env: "", wantLayers: []string{}, wantSource: configloader.SourceEnv},
+		{name: "layers flag replaces env", env: "env", args: []string{"--layers", "work,personal"}, wantLayers: []string{"work", "personal"}, wantSource: pflagloader.SourcePFlag},
+		{name: "layer flags replace env", env: "env", args: []string{"--layer", "work", "--layer", "personal"}, wantLayers: []string{"work", "personal"}, wantSource: pflagloader.SourcePFlag},
+		{name: "empty layers flag clears", env: "env", args: []string{"--layers", ""}, wantLayers: []string{}, wantSource: pflagloader.SourcePFlag},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("BREWKIT_LAYERS", tt.env)
+			flags := newTestFlagSet(t, append([]string{"--config", path}, tt.args...)...)
+
+			got, err := Load(flags)
+			if err != nil {
+				t.Fatalf("Load() returned err: %v", err)
+			}
+			if !reflect.DeepEqual(got.Layers, tt.wantLayers) {
+				t.Errorf("Layers = %v, want %v", got.Layers, tt.wantLayers)
+			}
+			if got.Report.Updates["layers"] != tt.wantSource {
+				t.Errorf("layers source = %q, want %q", got.Report.Updates["layers"], tt.wantSource)
+			}
+		})
 	}
 }
 
-func TestLoad_AbsoluteDirPreserved(t *testing.T) {
-	unsetEnv(t, "BREWKIT_PROFILES")
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`dir = "/abs/path"`)); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _, err := LoadWithReport(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Dir != "/abs/path" {
-		t.Errorf("Dir = %q, want /abs/path", cfg.Dir)
+func TestLoad_EffectiveLayers(t *testing.T) {
+	unsetEnv(t, "BREWKIT_LAYERS")
+	for _, tt := range []struct {
+		name     string
+		contents string
+		env      map[string]string
+		args     []string
+		want     []string
+		wantErr  string
+	}{
+		{name: "raw layers", contents: `layers = ["work", "personal"]`, want: []string{"work", "personal"}},
+		{name: "env_layers append in order", contents: "layers = [\"work\"]\nenv_layers = [\"A\", \"B\"]",
+			env: map[string]string{"A": "personal, laptop", "B": "home"}, want: []string{"work", "personal", "laptop", "home"}},
+		{name: "env_layers unset or empty add nothing", contents: "layers = [\"work\"]\nenv_layers = [\"UNSET_LAYERS\", \"EMPTY_LAYERS\"]",
+			env: map[string]string{"EMPTY_LAYERS": ""}, want: []string{"work"}},
+		{name: "env_layers blanks dropped", contents: `env_layers = ["A"]`,
+			env: map[string]string{"A": "  work , , personal  "}, want: []string{"work", "personal"}},
+		{name: "env_layers apply after flags clear", contents: "layers = [\"file\"]\nenv_layers = [\"A\"]",
+			env: map[string]string{"A": "laptop"}, args: []string{"--layers", ""}, want: []string{"laptop"}},
+		{name: "last occurrence wins", contents: "layers = [\"work\", \"personal\", \"work\"]\nenv_layers = [\"A\"]",
+			env: map[string]string{"A": "personal,laptop,work"}, want: []string{"personal", "laptop", "work"}},
+		{name: "empty flag list clears", contents: `layers = ["file"]`, args: []string{"--layers", ""}, want: []string{}},
+		{name: "blank TOML item rejected", contents: `layers = ["work", ""]`, wantErr: `invalid layer name ""`},
+		{name: "padded TOML item is not trimmed", contents: `layers = [" work "]`, wantErr: `invalid layer name " work "`},
+		{name: "blank flag item rejected", args: []string{"--layers", "work,,laptop"}, wantErr: `invalid layer name ""`},
+		{name: "whitespace env value is empty", env: map[string]string{"BREWKIT_LAYERS": " "}, want: []string{}},
+		{name: "local rejected", contents: `layers = ["local"]`, wantErr: `layer "local" is reserved`},
+		{name: "base rejected", contents: `layers = ["base"]`, wantErr: `layer "base" is reserved`},
+		{name: "local rejected from env_layers", contents: `env_layers = ["A"]`, env: map[string]string{"A": "local"}, wantErr: `layer "local" is reserved`},
+		{name: "uppercase rejected", contents: `layers = ["Work"]`, wantErr: `invalid layer name "Work"`},
+		{name: "underscore rejected from flag", args: []string{"--layer", "work_laptop"}, wantErr: `invalid layer name "work_laptop"`},
+		{name: "blank env_layers name rejected", contents: `env_layers = [""]`, wantErr: `env_layers entry ""`},
+		{name: "padded env_layers name rejected", contents: `env_layers = [" A"]`, wantErr: `env_layers entry " A"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+			flags := newTestFlagSet(t, append([]string{"--config", writeConfig(t, tt.contents)}, tt.args...)...)
+
+			got, err := Load(flags)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Load() error = %v, want it to contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() returned err: %v", err)
+			}
+			if !reflect.DeepEqual(got.Layers, tt.want) {
+				t.Errorf("Layers = %v, want %v", got.Layers, tt.want)
+			}
+		})
 	}
 }
 
-func TestLoad_BrewkitProfilesEnvOverridesRawProfiles(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`profiles = ["file"]`)); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("BREWKIT_PROFILES", "work, personal")
+func TestLoad_LayerOrder(t *testing.T) {
+	unsetEnv(t, "BREWKIT_LAYERS")
+	for _, tt := range []struct {
+		name      string
+		files     []string
+		layers    string
+		wantOrder []string
+	}{
+		{name: "no local files", layers: `["work"]`, wantOrder: []string{"work"}},
+		{name: "local after the layers", files: []string{"Brewfile.local"}, layers: `["work", "laptop"]`, wantOrder: []string{"work", "laptop", "local"}},
+		{name: "empty selection keeps local", files: []string{"Brewfile.local"}, layers: `[]`, wantOrder: []string{"local"}},
+		{name: "unsuffixed and base files are not applied", files: []string{"Brewfile", "Brewfile.base"}, layers: `[]`, wantOrder: []string{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, name := range tt.files {
+				if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			path := writeConfig(t, "dir = "+quote(dir)+"\nlayers = "+tt.layers+"\n")
 
-	cfg, report, err := LoadWithReport(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(cfg.Profiles, []string{"work", "personal"}) {
-		t.Errorf("Profiles = %v, want env override [work personal]", cfg.Profiles)
-	}
-	if report.Updates["profiles"] != configloader.SourceEnv {
-		t.Errorf("profiles source = %q, want env", report.Updates["profiles"])
+			got, err := Load(newTestFlagSet(t, "--config", path))
+			if err != nil {
+				t.Fatalf("Load() returned err: %v", err)
+			}
+			if !reflect.DeepEqual(got.LayerOrder, tt.wantOrder) {
+				t.Errorf("LayerOrder = %v, want %v", got.LayerOrder, tt.wantOrder)
+			}
+		})
 	}
 }
 
-func TestLoad_ProfilesFlagOverridesFileAndEnv(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`profiles = ["file"]`)); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("BREWKIT_PROFILES", "env")
-	flags := newTestFlagSet(t, "--profiles", "work,personal")
+func TestLoad_ClearedListReportsEmpty(t *testing.T) {
+	t.Setenv("BREWKIT_LAYERS", " ")
 
-	cfg, report, err := LoadWithReport(path, flags)
+	got, err := Load(newTestFlagSet(t))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Load() returned err: %v", err)
 	}
-	if !reflect.DeepEqual(cfg.Profiles, []string{"work", "personal"}) {
-		t.Errorf("Profiles = %v, want flag override [work personal]", cfg.Profiles)
-	}
-	if report.Updates["profiles"] != pflagloader.SourcePFlag {
-		t.Errorf("profiles source = %q, want pflag", report.Updates["profiles"])
-	}
-}
 
-func TestLoad_ProfileFlagOverridesFileAndEnv(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "brewkit.toml")
-	if err := writeFile(t, path, []byte(`profiles = ["file"]`)); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("BREWKIT_PROFILES", "env")
-	flags := newTestFlagSet(t, "--profile", "work", "--profile", "personal")
-
-	cfg, report, err := LoadWithReport(path, flags)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(cfg.Profiles, []string{"work", "personal"}) {
-		t.Errorf("Profiles = %v, want singular profile flags [work personal]", cfg.Profiles)
-	}
-	if report.Updates["profiles"] != pflagloader.SourcePFlag {
-		t.Errorf("profiles source = %q, want pflag", report.Updates["profiles"])
+	if !reflect.DeepEqual(got.Config.Layers, []string{}) {
+		t.Errorf("Config.Layers = %#v, want []string{}", got.Config.Layers)
 	}
 }
 
@@ -354,7 +363,26 @@ func unsetEnv(t *testing.T, key string) {
 	})
 }
 
-func writeFile(t *testing.T, path string, data []byte) error {
+// writeConfig writes contents to a brewkit.toml in a fresh temp directory
+// and returns its path.
+func writeConfig(t *testing.T, contents string) string {
 	t.Helper()
-	return os.WriteFile(path, data, 0o644)
+	path := filepath.Join(t.TempDir(), "brewkit.toml")
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func quote(s string) string {
+	return `"` + s + `"`
+}
+
+func mustAbs(t *testing.T, path string) string {
+	t.Helper()
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
 }

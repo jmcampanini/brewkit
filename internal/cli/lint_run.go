@@ -8,17 +8,17 @@ import (
 	"os"
 
 	"github.com/jmcampanini/brewkit/internal/config"
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/jmcampanini/brewkit/internal/lint"
 	"github.com/jmcampanini/brewkit/internal/parse"
-	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/jmcampanini/brewkit/internal/ui"
 )
 
-func (app *commandContext) profileSelectionFlagChanged() bool {
+func (app *commandContext) layerFlagChanged() bool {
 	if app.configFlagSet == nil {
 		return false
 	}
-	for _, name := range []string{"profiles", "profile"} {
+	for _, name := range []string{"layers", "layer"} {
 		flag := app.configFlagSet.Lookup(name)
 		if flag != nil && flag.Changed {
 			return true
@@ -28,28 +28,25 @@ func (app *commandContext) profileSelectionFlagChanged() bool {
 }
 
 func (app *commandContext) runLint(_ context.Context) error {
-	cfg, _, err := config.LoadWithReport(app.flags.configPath, app.configFlagSet)
+	effective, err := config.Load(app.configFlagSet)
 	if err != nil {
 		return err
 	}
 
-	// --profiles/--profile narrows the scan; otherwise lint scans every
-	// discoverable profile in the directory regardless of what's currently active.
-	var profiles []string
-	if app.profileSelectionFlagChanged() {
-		profiles = append([]string(nil), cfg.Profiles...)
-	} else {
-		discovered, err := profile.Discover(cfg.Dir)
+	// --layers/--layer narrows the scan to the effective layers; otherwise
+	// lint scans every layer that has a file in the directory.
+	layers := effective.Layers
+	if !app.layerFlagChanged() {
+		layers, err = layer.Discover(effective.Config.Dir)
 		if err != nil {
 			return err
 		}
-		profiles = discovered
 	}
 
 	var violations []lint.Violation
-	for _, prof := range profiles {
-		for _, k := range profile.AllKinds {
-			path := profile.PathFor(cfg.Dir, k, prof)
+	for _, name := range layers {
+		for _, k := range layer.AllKinds {
+			path := layer.PathFor(effective.Config.Dir, k, name)
 			_, statErr := os.Stat(path)
 			if errors.Is(statErr, fs.ErrNotExist) {
 				continue

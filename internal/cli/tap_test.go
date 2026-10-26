@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/jmcampanini/brewkit/internal/brew"
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/layer"
 )
 
 func TestRunApply_TapTrust(t *testing.T) {
@@ -42,7 +42,7 @@ func TestRunApply_TapTrust(t *testing.T) {
 			resetFlags()
 			defer resetFlags()
 			dir := fixtureRepo(t, map[string]string{"Tapfile.common": "user/tools " + tt.url + "\n"})
-			testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 			testApp.flags.dryRun, testApp.flags.hideUnchanged, testApp.flags.quiet = tt.dryRun, tt.hideUnchanged, tt.quiet
 			fake := brew.NewFake()
 			fake.TapsSet["user/tools"] = tt.installed
@@ -54,7 +54,7 @@ func TestRunApply_TapTrust(t *testing.T) {
 			useBrewer(t, probe)
 
 			out, errOut := captureOutput(t, func() {
-				if err := runApply(context.Background(), profile.KindTap, nil); err != nil {
+				if err := runApply(context.Background(), layer.KindTap, nil); err != nil {
 					t.Errorf("runApply: %v", err)
 				}
 			})
@@ -115,7 +115,7 @@ func TestRunApply_TapTrustFilteringAndDuplicates(t *testing.T) {
 					"Tapfile.local":    "user/tools\n",
 					"Tapfile.inactive": "inactive/tools\n",
 				})
-				testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+				useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 				testApp.flags.dryRun = dryRun
 				probe := &tapProbe{Fake: brew.NewFake()}
 				probe.TapsSet["unlisted/keep"] = true
@@ -123,7 +123,7 @@ func TestRunApply_TapTrustFilteringAndDuplicates(t *testing.T) {
 				useBrewer(t, probe)
 
 				out := captureStdout(t, func() {
-					if err := runApply(context.Background(), profile.KindTap, []string{filter}); err != nil {
+					if err := runApply(context.Background(), layer.KindTap, []string{filter}); err != nil {
 						t.Errorf("runApply: %v", err)
 					}
 				})
@@ -153,10 +153,10 @@ func TestRunApply_TapTrustFailures(t *testing.T) {
 				resetFlags()
 				defer resetFlags()
 				dir := fixtureRepo(t, map[string]string{"Tapfile.common": "broken/tools\nbroken/tools\nother/tools\n"})
-				testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+				useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 				testApp.flags.quiet = true
-				configText := fmt.Sprintf("dir = %q\nprofiles = [\"common\"]\nenv_profiles = \"\"\nfail_fast = %v\n", dir, failFast)
-				if err := os.WriteFile(testApp.flags.configPath, []byte(configText), 0o644); err != nil {
+				configText := fmt.Sprintf("dir = %q\nlayers = [\"common\"]\nenv_layers = []\nfail_fast = %v\n", dir, failFast)
+				if err := os.WriteFile(filepath.Join(dir, "brewkit.toml"), []byte(configText), 0o644); err != nil {
 					t.Fatal(err)
 				}
 				probe := &tapProbe{Fake: brew.NewFake()}
@@ -165,7 +165,7 @@ func TestRunApply_TapTrustFailures(t *testing.T) {
 				var runErr error
 
 				out, errOut := captureOutput(t, func() {
-					runErr = runApply(context.Background(), profile.KindTap, nil)
+					runErr = runApply(context.Background(), layer.KindTap, nil)
 				})
 
 				if runErr == nil || out != "" || !strings.Contains(errOut, "broken/tools") {
@@ -198,13 +198,13 @@ func TestRunApply_TapQueryFailure(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 	dir := fixtureRepo(t, map[string]string{"Tapfile.common": "user/tools\n"})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	probe := &tapProbe{Fake: brew.NewFake(), queryErr: errors.New("trust data unavailable")}
 	useBrewer(t, probe)
 	var runErr error
 
 	out, errOut := captureOutput(t, func() {
-		runErr = runApply(context.Background(), profile.KindTap, nil)
+		runErr = runApply(context.Background(), layer.KindTap, nil)
 	})
 
 	if !errors.Is(runErr, probe.queryErr) || !strings.Contains(out, "1 failed") || !strings.Contains(errOut, "trust data unavailable") {
@@ -230,12 +230,12 @@ func TestRunApply_TapWithoutSelectedEntriesDoesNotQuery(t *testing.T) {
 			resetFlags()
 			defer resetFlags()
 			dir := fixtureRepo(t, tt.files)
-			testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 			probe := &tapProbe{Fake: brew.NewFake()}
 			useBrewer(t, probe)
 
 			captureStdout(t, func() {
-				err := runApply(context.Background(), profile.KindTap, tt.args)
+				err := runApply(context.Background(), layer.KindTap, tt.args)
 				if (err != nil) != tt.wantError {
 					t.Errorf("runApply = %v, want error %v", err, tt.wantError)
 				}
@@ -254,7 +254,7 @@ func TestRunApply_TapSubprocessOutput(t *testing.T) {
 			resetFlags()
 			defer resetFlags()
 			dir := fixtureRepo(t, map[string]string{"Tapfile.common": "user/tools https://example.com/tools.git\n"})
-			testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 			testApp.flags.verbose = failure == "none"
 			testApp.flags.quiet = failure != "none"
 			t.Setenv("BREWKIT_TEST_FAILURE", failure)
@@ -289,7 +289,7 @@ esac
 			var runErr error
 
 			out, errOut := captureOutput(t, func() {
-				runErr = runApply(context.Background(), profile.KindTap, nil)
+				runErr = runApply(context.Background(), layer.KindTap, nil)
 			})
 
 			if (runErr != nil) != (failure != "none") {

@@ -1,4 +1,4 @@
-// Package apply applies layered profile entries through Homebrew.
+// Package apply applies layer file entries through Homebrew.
 package apply
 
 import (
@@ -10,32 +10,34 @@ import (
 	"strings"
 
 	"github.com/jmcampanini/brewkit/internal/brew"
-	"github.com/jmcampanini/brewkit/internal/config"
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/jmcampanini/brewkit/internal/parse"
-	"github.com/jmcampanini/brewkit/internal/profile"
 	"github.com/jmcampanini/brewkit/internal/ui"
 )
 
-// Options supplies configuration, Homebrew operations, and presentation for a run.
+// Options supplies the layer files, Homebrew operations, and presentation
+// for a run.
 type Options struct {
-	Brewer   brew.Brewer
-	Config   config.Config
-	DryRun   bool
-	Printer  *ui.Printer
-	Profiles []string
+	Brewer brew.Brewer
+	// Dir is the directory holding the layer files.
+	Dir    string
+	DryRun bool
+	// FailFast stops the run at the first failing entry.
+	FailFast bool
+	// Layers is the layer order to apply, automatic layers included.
+	Layers  []string
+	Printer *ui.Printer
 }
 
-// Run applies one kind of profile entry using the supplied configuration and output.
-func Run(ctx context.Context, t profile.Kind, args []string, opts Options) error {
-	cfg, profiles := opts.Config, opts.Profiles
-
+// Run applies one kind of layer entry using the supplied options.
+func Run(ctx context.Context, t layer.Kind, args []string, opts Options) error {
 	printer := opts.Printer
 	rc := &runContext{
 		ctx:      ctx,
 		brewer:   newProgressBrewer(opts.Brewer, printer),
 		printer:  printer,
 		dryRun:   opts.DryRun,
-		failFast: cfg.FailFast,
+		failFast: opts.FailFast,
 	}
 	defer rc.printer.Footer()
 
@@ -48,12 +50,12 @@ func Run(ctx context.Context, t profile.Kind, args []string, opts Options) error
 		matched  bool
 		failures []error
 	)
-	for _, prof := range profiles {
-		path := profile.PathFor(cfg.Dir, t, prof)
+	for _, name := range opts.Layers {
+		path := layer.PathFor(opts.Dir, t, name)
 		_, statErr := os.Stat(path)
 		if errors.Is(statErr, fs.ErrNotExist) {
 			if filter == "" {
-				rc.printer.Notice(fmt.Sprintf("%s: no %s, skipping", prof, t.FilenamePrefix()))
+				rc.printer.Notice(fmt.Sprintf("%s: no %s, skipping", name, t.FilenamePrefix()))
 			}
 			continue
 		}
@@ -67,7 +69,7 @@ func Run(ctx context.Context, t profile.Kind, args []string, opts Options) error
 		// Surface LineUnknown lines as failures rather than silently
 		// skipping them - `f.Entries()` filters to LineEntry only, so a
 		// malformed line would otherwise produce a clean exit and a
-		// partially applied profile.
+		// partially applied layer.
 		for _, l := range f.Lines {
 			if l.Kind != parse.LineUnknown {
 				continue
@@ -96,10 +98,10 @@ func Run(ctx context.Context, t profile.Kind, args []string, opts Options) error
 	}
 
 	if filter != "" && !matched {
-		return fmt.Errorf("%q not found in any active profile %s", filter, t)
+		return fmt.Errorf("%q not found in any layer %s", filter, t)
 	}
 
-	if t == profile.KindCask {
+	if t == layer.KindCask {
 		rc.printer.RestartAppsNotice(rc.restartApps)
 	}
 
@@ -172,7 +174,7 @@ type runContext struct {
 // The two things this laziness enables:
 //  1. `brewkit head` never invokes State at all (applyHead uses only
 //     per-formula probes and skips the ensureState call).
-//  2. A run that finds no matching profile files - Run stats each
+//  2. A run that finds no matching layer files - Run stats each
 //     path and `continue`s on ENOENT before ever entering apply* - can
 //     complete without shelling out to brew, which matters on machines
 //     where brew is unavailable or transiently broken.
@@ -190,7 +192,7 @@ func (rc *runContext) ensureState() error {
 
 // cacheFormula records a formula's post-action state under both its
 // fully qualified name (e.g. user/tap/foo) and its short name (foo) so a
-// later profile that references the same formula via either form sees
+// later layer that references the same formula via either form sees
 // the install and skips it.
 func (rc *runContext) cacheFormula(name string, fs brew.FormulaState) {
 	rc.state.Formulas[name] = fs
@@ -206,18 +208,18 @@ func (rc *runContext) cacheCask(name string, cs brew.CaskState) {
 	}
 }
 
-func (rc *runContext) apply(t profile.Kind, e *parse.Entry) error {
+func (rc *runContext) apply(t layer.Kind, e *parse.Entry) error {
 	switch t {
-	case profile.KindTap:
+	case layer.KindTap:
 		return rc.applyTap(e)
-	case profile.KindBrew:
+	case layer.KindBrew:
 		return rc.applyBrew(e)
-	case profile.KindHead:
+	case layer.KindHead:
 		return rc.applyHead(e)
-	case profile.KindCask:
+	case layer.KindCask:
 		return rc.applyCask(e)
 	}
-	return fmt.Errorf("unknown profile kind %d", t)
+	return fmt.Errorf("unknown layer kind %d", t)
 }
 
 func (rc *runContext) applyTap(e *parse.Entry) error {
@@ -281,9 +283,9 @@ func (rc *runContext) applyBrew(e *parse.Entry) error {
 	case !fs.Installed:
 		if rc.dryRun {
 			rc.printer.Item(ui.SymAdded, e.Name, "")
-			// Project the install into the cache so a later layered
-			// profile referencing the same formula sees it as up-to-date
-			// in the preview, matching real-run behavior.
+			// Project the install into the cache so a later layer
+			// referencing the same formula sees it as up-to-date in the
+			// preview, matching real-run behavior.
 			rc.cacheFormula(e.Name, brew.FormulaState{Installed: true, Version: e.Name})
 			return nil
 		}
@@ -324,11 +326,11 @@ func (rc *runContext) applyHead(e *parse.Entry) error {
 	if rc.headSeen == nil {
 		rc.headSeen = map[string]struct{}{}
 	}
-	// Same formula listed in two layered profiles (under either qualified
-	// or short form) is reported once. Key on shortName so e.g.
+	// Same formula listed in two layers (under either qualified or short
+	// form) is reported once. Key on shortName so e.g.
 	// "homebrew/core/tmux" and "tmux" collide. Mark the entry as seen
 	// only after the operation succeeds; if the first invocation errors
-	// in fail_fast=false mode, a later profile still gets a chance to
+	// in fail_fast=false mode, a later layer still gets a chance to
 	// retry instead of silently being reported as "already processed".
 	key := shortName(e.Name)
 	if _, ok := rc.headSeen[key]; ok {

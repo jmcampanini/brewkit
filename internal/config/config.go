@@ -1,13 +1,15 @@
-// Package config loads brewkit's raw configuration from defaults,
-// an optional brewkit.toml file, BREWKIT_* environment variables, and
-// config-backed CLI flags.
+// Package config loads brewkit's configuration from defaults, an optional
+// brewkit.toml file, BREWKIT_* environment variables, and config-backed CLI
+// flags, then derives and validates the values the commands consume.
 package config
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/jmcampanini/go-config-loader/configloader"
 	"github.com/jmcampanini/go-config-loader/pflagloader"
 	"github.com/spf13/pflag"
@@ -16,29 +18,53 @@ import (
 const (
 	appName        = "brewkit"
 	configFileName = "brewkit.toml"
+	configFlagName = "config"
 )
 
-// Config is brewkit's raw loaded configuration. Runtime behavior such as
-// env_profiles expansion, local-profile auto-append, and empty-profile apply
-// validation is derived outside this package.
+// Config is brewkit's raw loaded configuration, the value the config
+// command prints as TOML. Effective carries the values derived from it.
 type Config struct {
-	// Dir is the directory holding the profile files
-	// (Brewfile.<p>, Caskfile.<p>, Headfile.<p>, Tapfile.<p>).
-	// Relative paths are intentionally resolved by the process current working
-	// directory at use time, not by the location of brewkit.toml.
+	// Dir is the directory holding the layer files
+	// (Brewfile[.<layer>], Caskfile[.<layer>], Headfile[.<layer>],
+	// Tapfile[.<layer>]). Relative paths are resolved by the process
+	// current working directory, not by the location of brewkit.toml.
 	Dir string `toml:"dir"`
 
-	// Profiles is the raw active profile list. It may be overridden by
-	// BREWKIT_PROFILES, by --profiles, or by repeated --profile flags.
-	Profiles []string `toml:"profiles" config:"profiles" pflag_singular:"profile" help:"active profiles; overrides brewkit.toml and env"`
+	// Layers is the raw layer list. BREWKIT_LAYERS, --layers, and repeated
+	// --layer flags each replace it.
+	Layers []string `toml:"layers" config:"layers" pflag_singular:"layer" help:"layers to select; replaces brewkit.toml and BREWKIT_LAYERS"`
 
-	// EnvProfiles names an additional environment variable whose comma-separated
-	// values append to Profiles during runtime derivation.
-	EnvProfiles string `toml:"env_profiles"`
+	// EnvLayers names environment variables whose comma-separated values
+	// append layers to Layers. It is set from the file only.
+	EnvLayers []string `toml:"env_layers"`
 
 	// FailFast stops execution at the first error when true; collects and
 	// reports all errors at the end when false.
 	FailFast bool `toml:"fail_fast"`
+}
+
+// Effective is the validated configuration every command consumes.
+type Effective struct {
+	// Config is the raw configuration after defaults, the file, the
+	// environment, and flags have been applied.
+	Config Config
+
+	// Dir is Config.Dir made absolute, reported as effective_dir. Commands
+	// read files through Config.Dir so the paths they print keep the form
+	// the person wrote.
+	Dir string
+
+	// Layers is the effective layers: the raw layers plus the env_layers
+	// additions, keeping the last occurrence of each name. It never holds
+	// base or local.
+	Layers []string
+
+	// LayerOrder is the list the apply commands walk: Layers, then local
+	// when a *file.local exists.
+	LayerOrder []string
+
+	// Report records which source set each field.
+	Report LoadReport
 }
 
 // LoadReport is the provenance report returned by the shared config loader.
@@ -48,32 +74,63 @@ type LoadReport = configloader.LoadReport
 // found and no environment variables or flags override.
 func Defaults() Config {
 	return Config{
-		Dir:         ".",
-		Profiles:    []string{},
-		EnvProfiles: "",
-		FailFast:    true,
+		Dir:       ".",
+		Layers:    []string{},
+		EnvLayers: []string{},
+		FailFast:  true,
 	}
 }
 
-// RegisterFlags registers brewkit's config-backed flags on flags.
+// RegisterFlags registers --config and brewkit's config-backed flags on flags.
 func RegisterFlags(flags *pflag.FlagSet) error {
+	flags.String(configFlagName, "", "config file (default ./brewkit.toml when present)")
 	return pflagloader.Register[Config](flags)
 }
 
-// Load reads brewkit.toml from path (or, if path is empty, from
-// ./brewkit.toml in the current working directory) and overlays BREWKIT_* env vars.
-// If path is empty and no file exists, Defaults is used. A non-empty path that
-// does not exist is an error.
-func Load(path string) (Config, error) {
-	cfg, _, err := LoadWithReport(path, nil)
-	return cfg, err
+// Load applies defaults, brewkit.toml, BREWKIT_* environment variables, and
+// the flags registered by RegisterFlags, then derives and validates the
+// effective values. A --config path the person supplied must name a readable
+// file, even when it is empty; otherwise ./brewkit.toml is read when present.
+// flags may be nil, in which case no flag is applied.
+func Load(flags *pflag.FlagSet) (Effective, error) {
+	cfg, report, err := loadRaw(flags)
+	if err != nil {
+		return Effective{}, err
+	}
+
+	if cfg.Dir == "" {
+		return Effective{}, fmt.Errorf("dir must not be empty")
+	}
+	dir, err := filepath.Abs(cfg.Dir)
+	if err != nil {
+		return Effective{}, fmt.Errorf("resolve effective dir %q: %w", cfg.Dir, err)
+	}
+
+	// The loader delivers --layers "" and a whitespace-only BREWKIT_LAYERS
+	// as [""]; that shape is the cleared list, not a blank name.
+	if len(cfg.Layers) == 1 && cfg.Layers[0] == "" {
+		cfg.Layers = []string{}
+	}
+	layers, err := effectiveLayers(cfg)
+	if err != nil {
+		return Effective{}, err
+	}
+	order, err := layerOrder(cfg.Dir, layers)
+	if err != nil {
+		return Effective{}, err
+	}
+
+	return Effective{
+		Config:     cfg,
+		Dir:        dir,
+		Layers:     layers,
+		LayerOrder: order,
+		Report:     report,
+	}, nil
 }
 
-// LoadWithReport loads config and returns the shared library's provenance
-// report. When flags is non-nil, changed config-backed pflags override file and
-// environment values.
-func LoadWithReport(path string, flags *pflag.FlagSet) (Config, LoadReport, error) {
-	fileLoader, err := newFileLoader(path)
+func loadRaw(flags *pflag.FlagSet) (Config, LoadReport, error) {
+	fileLoader, err := newFileLoader(flags)
 	if err != nil {
 		return Config{}, LoadReport{}, err
 	}
@@ -91,18 +148,15 @@ func LoadWithReport(path string, flags *pflag.FlagSet) (Config, LoadReport, erro
 		loaders = append(loaders, flagLoader)
 	}
 
-	cfg, report, err := configloader.Load(Defaults(), loaders...)
-	if err != nil {
-		return Config{}, LoadReport{}, err
-	}
-	if cfg.Dir == "" {
-		return Config{}, LoadReport{}, fmt.Errorf("dir must not be empty")
-	}
-	return cfg, report, nil
+	return configloader.Load(Defaults(), loaders...)
 }
 
-func newFileLoader(path string) (configloader.ConfigLoader[Config], error) {
-	if path != "" {
+func newFileLoader(flags *pflag.FlagSet) (configloader.ConfigLoader[Config], error) {
+	if flags != nil && flags.Changed(configFlagName) {
+		path := flags.Lookup(configFlagName).Value.String()
+		if path == "" {
+			return nil, fmt.Errorf("--%s: path must not be empty", configFlagName)
+		}
 		return configloader.NewRequiredFileLoader[Config](path)
 	}
 
@@ -118,4 +172,57 @@ func newFileLoader(path string) (configloader.ConfigLoader[Config], error) {
 		return nil, fmt.Errorf("config file %q is a directory", abs)
 	}
 	return configloader.NewPickLastFileLoader[Config](configloader.File(abs))
+}
+
+// effectiveLayers combines the raw layers with the env_layers additions,
+// keeps the last occurrence of each name, and validates every survivor.
+func effectiveLayers(cfg Config) ([]string, error) {
+	combined := append([]string(nil), cfg.Layers...)
+	for _, variable := range cfg.EnvLayers {
+		if variable == "" || strings.TrimSpace(variable) != variable {
+			return nil, fmt.Errorf("env_layers entry %q must be a variable name without surrounding whitespace", variable)
+		}
+		for _, item := range strings.Split(os.Getenv(variable), ",") {
+			if name := strings.TrimSpace(item); name != "" {
+				combined = append(combined, name)
+			}
+		}
+	}
+
+	layers := keepLastOccurrence(combined)
+	for _, name := range layers {
+		if err := layer.ValidateSelected(name); err != nil {
+			return nil, err
+		}
+	}
+	return layers, nil
+}
+
+func layerOrder(dir string, layers []string) ([]string, error) {
+	hasLocal, err := layer.HasFiles(dir, layer.LocalName)
+	if err != nil {
+		return nil, err
+	}
+
+	order := make([]string, 0, len(layers)+1)
+	order = append(order, layers...)
+	if hasLocal {
+		order = append(order, layer.LocalName)
+	}
+	return order, nil
+}
+
+func keepLastOccurrence(values []string) []string {
+	lastIndex := make(map[string]int, len(values))
+	for i, value := range values {
+		lastIndex[value] = i
+	}
+
+	out := make([]string, 0, len(lastIndex))
+	for i, value := range values {
+		if lastIndex[value] == i {
+			out = append(out, value)
+		}
+	}
+	return out
 }

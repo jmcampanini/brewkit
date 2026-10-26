@@ -1,4 +1,4 @@
-// Package parse parses brewkit profile files (Brewfile, Caskfile, Headfile,
+// Package parse parses brewkit layer files (Brewfile, Caskfile, Headfile,
 // Tapfile) into a uniform line-oriented structure suitable for both runtime
 // application and lint checks.
 package parse
@@ -10,10 +10,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/layer"
 )
 
-// LineKind classifies a single line in a profile file.
+// LineKind classifies a single line in a layer file.
 type LineKind int
 
 const (
@@ -28,7 +28,7 @@ const (
 	LineUnknown
 )
 
-// Entry is a single parsed entry from a profile file.
+// Entry is a single parsed entry from a layer file.
 type Entry struct {
 	// Name is the canonical key for sort/identity. For Brewfile this is
 	// the contents of the quoted string; for the simple file types it
@@ -53,7 +53,7 @@ type Entry struct {
 	CommentColumn int
 }
 
-// Line is one parsed line from a profile file.
+// Line is one parsed line from a layer file.
 type Line struct {
 	Number int
 	Raw    string
@@ -61,10 +61,10 @@ type Line struct {
 	Entry  *Entry
 }
 
-// File is a parsed profile file.
+// File is a parsed layer file.
 type File struct {
 	Path  string
-	Kind  profile.Kind
+	Kind  layer.Kind
 	Lines []Line
 }
 
@@ -80,8 +80,8 @@ func (f *File) Entries() []*Entry {
 }
 
 // Parse dispatches to the appropriate parser for the given file kind.
-func Parse(path string, kind profile.Kind) (*File, error) {
-	if kind == profile.KindBrew {
+func Parse(path string, kind layer.Kind) (*File, error) {
+	if kind == layer.KindBrew {
 		return Brewfile(path)
 	}
 	return Simple(path, kind)
@@ -93,17 +93,17 @@ var brewfileEntryRe = regexp.MustCompile(`^\s*brew\s+"([^"]+)"(.*)$`)
 // `brew "name"` and `brew "name" # description` lines are recognized as
 // entries; anything else non-comment is reported as LineUnknown for lint.
 func Brewfile(path string) (*File, error) {
-	return parseFile(path, profile.KindBrew, parseBrewfileLine)
+	return parseFile(path, layer.KindBrew, parseBrewfileLine)
 }
 
 // Simple parses a Tapfile, Headfile, or Caskfile (one entry per line,
 // optional `# description`). Tapfile may carry an optional URL as a second
 // token.
-func Simple(path string, kind profile.Kind) (*File, error) {
-	if kind == profile.KindBrew {
+func Simple(path string, kind layer.Kind) (*File, error) {
+	if kind == layer.KindBrew {
 		return nil, fmt.Errorf("parse.Simple cannot parse %s; use parse.Brewfile", kind)
 	}
-	allowExtra := kind == profile.KindTap
+	allowExtra := kind == layer.KindTap
 	return parseFile(path, kind, func(raw string) (LineKind, *Entry) {
 		return parseSimpleLine(raw, allowExtra)
 	})
@@ -111,7 +111,7 @@ func Simple(path string, kind profile.Kind) (*File, error) {
 
 type lineParser func(raw string) (LineKind, *Entry)
 
-func parseFile(path string, kind profile.Kind, parser lineParser) (*File, error) {
+func parseFile(path string, kind layer.Kind, parser lineParser) (*File, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)

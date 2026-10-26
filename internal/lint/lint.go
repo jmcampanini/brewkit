@@ -1,4 +1,4 @@
-// Package lint validates brewkit profile files against the shared style
+// Package lint validates brewkit layer files against the shared style
 // rules: alphabetical sort, comment style, and entry shape.
 package lint
 
@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/jmcampanini/brewkit/internal/parse"
-	"github.com/jmcampanini/brewkit/internal/profile"
 )
 
 // Violation is one lint finding: which file/line broke which rule.
@@ -94,7 +94,7 @@ func ruleSortOrder(f *parse.File) []Violation {
 func ruleTrailingDescription(f *parse.File) []Violation {
 	// Tapfile entries are exempt: the name already carries owner/repo,
 	// and real-world Tapfiles don't conventionally carry descriptions.
-	if f.Kind == profile.KindTap {
+	if f.Kind == layer.KindTap {
 		return nil
 	}
 	var out []Violation

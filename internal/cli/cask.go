@@ -2,17 +2,17 @@ package cli
 
 import (
 	"github.com/jmcampanini/brewkit/internal/docs"
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/spf13/cobra"
 )
 
 func newCaskCmd(app *commandContext) *cobra.Command {
 	cmd := newApplyCmd(app, applyCommandSpec{
 		use:   "cask [CASK]",
-		short: "Apply Caskfile entries for active profiles (greedy upgrades)",
-		kind:  profile.KindCask,
-		kindHelp: `Install or upgrade every cask listed in Caskfile.<profile> for the active
-profiles. For each entry brewkit runs 'brew install --cask <name>' when it
+		short: "Apply Caskfile entries for the layers in order (greedy upgrades)",
+		kind:  layer.KindCask,
+		kindHelp: `Install or upgrade every cask listed in the Caskfile of each layer in
+order. For each entry brewkit runs 'brew install --cask <name>' when it
 is not installed, 'brew upgrade --cask --greedy <name>' when it is
 outdated, and otherwise reports ✓ with the installed version. --greedy,
 also used for the outdated query, includes casks marked auto_updates or

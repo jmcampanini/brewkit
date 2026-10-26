@@ -109,11 +109,11 @@ func TestExecuteReturnsStatusAndPrintsErrors(t *testing.T) {
 		errorOutput string
 	}{
 		{name: "success", args: []string{"docs"}, output: docs.Manual()},
-		{name: "failure", args: []string{"--output-prefix", "prefix: ", "brew"}, status: 1,
-			errorOutput: "prefix: brewkit: no active profiles selected; set profiles in brewkit.toml, BREWKIT_PROFILES, --profiles/--profile, env_profiles, or add a *file.local\n"},
+		{name: "failure", args: []string{"--output-prefix", "prefix: ", "--layer", "local", "brew"}, status: 1,
+			errorOutput: "prefix: brewkit: layer \"local\" is reserved and cannot be selected; remove it from the layers\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("BREWKIT_PROFILES", "")
+			t.Setenv("BREWKIT_LAYERS", "")
 			os.Args = append([]string{"brewkit"}, tt.args...)
 			var status int
 			out, errOut := captureOutput(t, func() { status = Execute() })
@@ -124,19 +124,15 @@ func TestExecuteReturnsStatusAndPrintsErrors(t *testing.T) {
 	}
 }
 
-func TestRootProfilesFlagsRegistered(t *testing.T) {
+func TestRootPersistentFlagsRegistered(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
 	root := newRootCmd(testApp)
-	if root.PersistentFlags().Lookup("profiles") == nil {
-		t.Fatal("root should register --profiles")
-	}
-	if root.PersistentFlags().Lookup("profile") == nil {
-		t.Fatal("root should register singular --profile")
-	}
-	if root.PersistentFlags().Lookup("output-prefix") == nil {
-		t.Fatal("root should register --output-prefix")
+	for _, name := range []string{"config", "layers", "layer", "output-prefix"} {
+		if root.PersistentFlags().Lookup(name) == nil {
+			t.Errorf("root should register --%s", name)
+		}
 	}
 }
 

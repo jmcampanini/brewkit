@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/layer"
 )
 
 func TestBrewfile_CommonFixture(t *testing.T) {
@@ -43,7 +43,7 @@ func TestBrewfile_PersonalFixture(t *testing.T) {
 }
 
 func TestSimple_Caskfile(t *testing.T) {
-	f, err := Simple(filepath.Join("testdata", "Caskfile.common"), profile.KindCask)
+	f, err := Simple(filepath.Join("testdata", "Caskfile.common"), layer.KindCask)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestSimple_Caskfile(t *testing.T) {
 }
 
 func TestSimple_Headfile(t *testing.T) {
-	f, err := Simple(filepath.Join("testdata", "Headfile.common"), profile.KindHead)
+	f, err := Simple(filepath.Join("testdata", "Headfile.common"), layer.KindHead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestSimple_Headfile(t *testing.T) {
 }
 
 func TestSimple_Tapfile(t *testing.T) {
-	f, err := Simple(filepath.Join("testdata", "Tapfile.common"), profile.KindTap)
+	f, err := Simple(filepath.Join("testdata", "Tapfile.common"), layer.KindTap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestSimple_Tapfile(t *testing.T) {
 }
 
 func TestSimple_RejectsBrewfile(t *testing.T) {
-	if _, err := Simple("testdata/Brewfile.common", profile.KindBrew); err == nil {
+	if _, err := Simple("testdata/Brewfile.common", layer.KindBrew); err == nil {
 		t.Error("Simple should reject KindBrew")
 	}
 }
@@ -200,7 +200,7 @@ func TestSimple_InlineFixtures(t *testing.T) {
 	cases := []struct {
 		name      string
 		raw       string
-		kind      profile.Kind
+		kind      layer.Kind
 		wantKind  LineKind
 		wantName  string
 		wantExtra string
@@ -209,7 +209,7 @@ func TestSimple_InlineFixtures(t *testing.T) {
 		{
 			name:     "cask with description",
 			raw:      `ghostty                # Terminal`,
-			kind:     profile.KindCask,
+			kind:     layer.KindCask,
 			wantKind: LineEntry,
 			wantName: "ghostty",
 			wantDesc: "Terminal",
@@ -217,7 +217,7 @@ func TestSimple_InlineFixtures(t *testing.T) {
 		{
 			name:     "head qualified",
 			raw:      `example/tap/foo           # foo`,
-			kind:     profile.KindHead,
+			kind:     layer.KindHead,
 			wantKind: LineEntry,
 			wantName: "example/tap/foo",
 			wantDesc: "foo",
@@ -225,7 +225,7 @@ func TestSimple_InlineFixtures(t *testing.T) {
 		{
 			name:      "tap with url",
 			raw:       `example/foo https://example.com/foo`,
-			kind:      profile.KindTap,
+			kind:      layer.KindTap,
 			wantKind:  LineEntry,
 			wantName:  "example/foo",
 			wantExtra: "https://example.com/foo",
@@ -233,14 +233,14 @@ func TestSimple_InlineFixtures(t *testing.T) {
 		{
 			name:     "tap without url",
 			raw:      `example/bar`,
-			kind:     profile.KindTap,
+			kind:     layer.KindTap,
 			wantKind: LineEntry,
 			wantName: "example/bar",
 		},
 		{
 			name:      "tap with url and description",
 			raw:       `example/foo https://example.com/foo  # foo repo`,
-			kind:      profile.KindTap,
+			kind:      layer.KindTap,
 			wantKind:  LineEntry,
 			wantName:  "example/foo",
 			wantExtra: "https://example.com/foo",
@@ -249,13 +249,13 @@ func TestSimple_InlineFixtures(t *testing.T) {
 		{
 			name:     "cask with extra token is unknown",
 			raw:      `ghostty extra-token`,
-			kind:     profile.KindCask,
+			kind:     layer.KindCask,
 			wantKind: LineUnknown,
 		},
 		{
 			name:     "tap with three tokens is unknown",
 			raw:      `a b c`,
-			kind:     profile.KindTap,
+			kind:     layer.KindTap,
 			wantKind: LineUnknown,
 		},
 	}
