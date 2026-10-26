@@ -16,8 +16,9 @@ from its HEAD source. For each entry brewkit runs 'brew info --json=v2
 without a HEAD source, fails without being changed (✗); one that is not
 installed is installed with 'brew install --head --formula <name>' (+);
 one installed as HEAD is refreshed with 'brew fetch --HEAD --formula
-<name>', the newest commit of the cached source repository is read with
-git, and when it differs from the installed HEAD-<sha> brewkit runs
+<name>', the cached source repository that 'brew --cache --HEAD <name>'
+names is read with 'git rev-parse' for its newest commit, and when it
+differs from the installed HEAD-<sha> brewkit runs
 'brew uninstall --formula <name>' then 'brew install --head --formula
 <name>' (↑), otherwise it reports ✓.
 Install, uninstall, and fetch run with HOMEBREW_NO_GITHUB_API=1 and

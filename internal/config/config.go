@@ -32,7 +32,7 @@ type Config struct {
 
 	// Layers is the raw layer list. BREWKIT_LAYERS, --layers, and repeated
 	// --layer flags each replace it.
-	Layers []string `toml:"layers" config:"layers" pflag_singular:"layer" help:"layers to select; replaces brewkit.toml and BREWKIT_LAYERS"`
+	Layers []string `toml:"layers" config:"layers" pflag_singular:"layer" help:"layers; replaces BREWKIT_LAYERS and brewkit.toml"`
 
 	// EnvLayers names environment variables whose comma-separated values
 	// append layers to Layers. It is set from the file only.

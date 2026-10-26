@@ -2,7 +2,7 @@ package ui
 
 import (
 	"bytes"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -38,32 +38,78 @@ func TestDarkBackgroundFromEnv(t *testing.T) {
 	}
 }
 
-func TestTerminalColorProfileHonorsAnyNonemptyNoColor(t *testing.T) {
-	t.Setenv("NO_COLOR", "please")
-	t.Setenv("CLICOLOR_FORCE", "1")
-	t.Setenv("TERM", "xterm-256color")
+func TestStreamColorProfile(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     ColorMode
+		terminal bool
+		env      []string
+		want     colorprofile.Profile
+	}{
+		{name: "never on a color terminal", mode: ColorNever, terminal: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, want: colorprofile.ASCII},
+		{name: "always on a non-terminal", mode: ColorAlways, terminal: false, env: []string{"TERM=xterm-256color"}, want: colorprofile.ANSI256},
+		{name: "always overrides NO_COLOR", mode: ColorAlways, terminal: true, env: []string{"TERM=xterm-256color", "NO_COLOR=1"}, want: colorprofile.ANSI256},
+		{name: "always without a terminal description", mode: ColorAlways, terminal: false, env: []string{"TERM=dumb"}, want: colorprofile.ANSI},
+		{name: "auto honors any nonempty NO_COLOR", mode: ColorAuto, terminal: true, env: []string{"TERM=xterm-256color", "CLICOLOR_FORCE=1", "NO_COLOR=please"}, want: colorprofile.ASCII},
+		{name: "auto disables color for TERM=dumb", mode: ColorAuto, terminal: true, env: []string{"TERM=dumb", "CLICOLOR_FORCE=1"}, want: colorprofile.ASCII},
+		{name: "auto disables color on a non-terminal", mode: ColorAuto, terminal: false, env: []string{"TERM=xterm-256color", "CLICOLOR_FORCE=1"}, want: colorprofile.ASCII},
+	}
 
-	if got := terminalColorProfile(&bytes.Buffer{}); got != colorprofile.ASCII {
-		t.Fatalf("terminalColorProfile with NO_COLOR = %v, want ASCII", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := streamColorProfile(tt.mode, &bytes.Buffer{}, tt.terminal, tt.env)
+			if got != tt.want {
+				t.Errorf("streamColorProfile(%v, terminal=%v, %q) = %v, want %v", tt.mode, tt.terminal, tt.env, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestTerminalColorEnvironmentOmitsTmux(t *testing.T) {
-	t.Setenv("TMUX", "/private/tmp/tmux/default,1,0")
-	t.Setenv("BREWKIT_TEST_COLOR_ENV", "kept")
-
-	foundKept := false
-	for _, entry := range terminalColorEnvironment() {
-		key, value, _ := strings.Cut(entry, "=")
-		switch key {
-		case "TMUX":
-			t.Fatalf("terminal color environment should omit TMUX: %q", entry)
-		case "BREWKIT_TEST_COLOR_ENV":
-			foundKept = value == "kept"
+func TestColorModeSet(t *testing.T) {
+	for _, value := range []string{"auto", "always", "never"} {
+		var mode ColorMode
+		if err := mode.Set(value); err != nil || mode.String() != value {
+			t.Errorf("ColorMode.Set(%q) = %v with mode %q, want the mode named %q", value, err, mode, value)
 		}
 	}
-	if !foundKept {
-		t.Fatal("terminal color environment should preserve unrelated variables")
+
+	mode := ColorAlways
+	if err := mode.Set("sometimes"); err == nil || mode != ColorAlways {
+		t.Errorf("ColorMode.Set(\"sometimes\") = %v with mode %q, want a rejection that keeps always", err, mode)
+	}
+	if got := (ColorMode("")).String(); got != "auto" {
+		t.Errorf("zero ColorMode.String() = %q, want auto", got)
+	}
+}
+
+func TestTerminalActsOnEscapes(t *testing.T) {
+	tests := []struct {
+		name string
+		env  []string
+		want bool
+	}{
+		{name: "unset TERM", env: []string{"NO_COLOR=1"}, want: false},
+		{name: "empty TERM", env: []string{"TERM="}, want: false},
+		{name: "dumb", env: []string{"TERM=dumb"}, want: false},
+		{name: "xterm", env: []string{"TERM=xterm-256color", "NO_COLOR=1"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := terminalActsOnEscapes(tt.env); got != tt.want {
+				t.Errorf("terminalActsOnEscapes(%q) = %v, want %v", tt.env, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestColorDetectionEnvironmentOmitsTmuxAndDroppedKeys(t *testing.T) {
+	env := []string{"TMUX=/private/tmp/tmux/default,1,0", "NO_COLOR=1", "TERM=xterm"}
+
+	got := colorDetectionEnvironment(env, "NO_COLOR")
+
+	if want := []string{"TERM=xterm"}; !slices.Equal(got, want) {
+		t.Errorf("colorDetectionEnvironment(%q, NO_COLOR) = %q, want %q", env, got, want)
 	}
 }
 
