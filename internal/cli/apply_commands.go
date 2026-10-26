@@ -4,7 +4,6 @@ import (
 	"github.com/jmcampanini/brewkit/internal/apply"
 	"github.com/jmcampanini/brewkit/internal/brew"
 	"github.com/jmcampanini/brewkit/internal/config"
-	"github.com/jmcampanini/brewkit/internal/docs"
 	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/jmcampanini/brewkit/internal/ui"
 	"github.com/spf13/cobra"
@@ -26,15 +25,18 @@ type applyCommandSpec struct {
 
 func newApplyCmd(app *commandContext, spec applyCommandSpec) *cobra.Command {
 	return &cobra.Command{
-		Use:   spec.use,
-		Short: spec.short,
+		GroupID: commandGroupID,
+		Use:     spec.use,
+		Short:   spec.short,
 		Long: spec.kindHelp + `
 
-` + docs.ApplyOperandHelp + `
+` + layerFileLocationHelp(spec.kind.FilenamePrefix()) + `
 
-` + docs.LayerSelectionHelp + `
+` + applyOperandHelp + `
 
-` + docs.ApplyOutputHelp,
+` + layerSelectionHelp + `
+
+` + applyOutputHelp,
 		Example: spec.example,
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,6 +59,7 @@ func newApplyCmd(app *commandContext, spec applyCommandSpec) *cobra.Command {
 				FailFast: effective.Config.FailFast,
 				Layers:   effective.LayerOrder,
 				Printer: ui.NewTerminalPrinter(ui.TerminalOptions{
+					Color:         app.flags.color,
 					Level:         level,
 					DryRun:        app.flags.dryRun,
 					HideUnchanged: app.flags.hideUnchanged,

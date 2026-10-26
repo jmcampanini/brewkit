@@ -1,15 +1,13 @@
 package cli
 
-import (
-	"github.com/jmcampanini/brewkit/internal/docs"
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 func newConfigCmd(app *commandContext) *cobra.Command {
 	var provenance bool
 	cmd := &cobra.Command{
-		Use:   "config",
-		Short: "Print loaded config and effective values",
+		GroupID: commandGroupID,
+		Use:     "config",
+		Short:   "Print loaded config and effective values",
 		Long: `Print the configuration in effect as TOML on stdout, followed by a
 commented effective-value section and, with --provenance, a commented
 provenance section. Nothing is modified and no brew command runs.
@@ -19,18 +17,21 @@ earlier one sets: built-in defaults (dir = ".", layers = [],
 env_layers = [], fail_fast = true), brewkit.toml, the environment
 variable BREWKIT_LAYERS, then the flags --layers and --layer, which
 every command accepts. Only layers has an environment variable and
-flags; dir, env_layers, and fail_fast come from the file alone. An
-unknown key in brewkit.toml is an error, and dir must not be empty.
+flags; dir, env_layers, and fail_fast come from the file alone.
 
-` + docs.ConfigDiscoveryHelp + `
+` + configDiscoveryHelp + `
 
-Keys: dir (directory holding the layer files), layers (list of layer
-names), env_layers (list of environment variable names whose
-comma-separated values append to layers), and fail_fast (stop at the
-first failing entry when true; attempt every entry and report all
-failures at the end when false).
+Keys: dir (the directory holding the layer files, relative to the
+current working directory; must not be empty), layers (the layer names
+to select; each must satisfy the layer name grammar below), env_layers
+(the names of environment variables whose comma-separated values
+append to layers; each entry must be a variable name without
+surrounding whitespace, so a blank or padded entry is an error), and
+fail_fast (stop at the first failing entry when true; attempt every
+entry and report all failures at the end when false). Any other key is
+an error.
 
-` + docs.LayerSelectionHelp + `
+` + layerSelectionHelp + `
 
 The TOML section reloads as brewkit.toml. The '# effective:' block gives
 effective_dir (dir made absolute), effective_layers (the selected layers

@@ -48,7 +48,7 @@ mise run build
 | `brewkit brew ripgrep` | Apply only the listed entry named `ripgrep`. |
 | `brewkit config` | Print the configuration in effect and the derived layer order; `--provenance` adds the source of each value. |
 
-`brewkit --help`, each command's `--help`, and the help topic `brewkit help exit-codes` are the canonical reference; `brewkit docs` prints the longer manual that supplements them.
+`brewkit --help`, each command's `--help`, and the help topics it lists (`brewkit help layers`, `brewkit help layer-files`, and `brewkit help exit-codes`) are the canonical reference.
 
 A full run is `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` in that order, usually after `brewkit lint` has checked the files.
 

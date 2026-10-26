@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -11,6 +13,45 @@ import (
 	"golang.org/x/term"
 )
 
+// ColorMode is the --color setting: when the output brewkit itself renders
+// is colored. It never affects the output of brew, which passes through
+// unchanged. Its zero value is auto, and it implements the flag value
+// interface so an unknown mode is rejected while the flag is parsed.
+type ColorMode string
+
+// The color modes, in the order a person reaches for them.
+const (
+	// ColorAuto colors a stream only when it is a terminal, TERM is not
+	// dumb, and NO_COLOR is empty.
+	ColorAuto ColorMode = "auto"
+	// ColorAlways colors every stream, even one that is not a terminal
+	// or when NO_COLOR is set.
+	ColorAlways ColorMode = "always"
+	// ColorNever disables color on every stream.
+	ColorNever ColorMode = "never"
+)
+
+// Set stores the mode named by value and rejects any other value.
+func (m *ColorMode) Set(value string) error {
+	switch mode := ColorMode(value); mode {
+	case ColorAuto, ColorAlways, ColorNever:
+		*m = mode
+		return nil
+	}
+	return fmt.Errorf("must be auto, always, or never")
+}
+
+// String returns the mode name, auto for the zero value.
+func (m ColorMode) String() string {
+	if m == "" {
+		return string(ColorAuto)
+	}
+	return string(m)
+}
+
+// Type names the flag value in usage text.
+func (ColorMode) Type() string { return "MODE" }
+
 type fdWriter interface{ Fd() uintptr }
 
 func isTerminal(w io.Writer) bool {
@@ -18,28 +59,59 @@ func isTerminal(w io.Writer) bool {
 	return ok && term.IsTerminal(fd)
 }
 
-func terminalColorProfile(w io.Writer) colorprofile.Profile {
-	if os.Getenv("NO_COLOR") != "" {
+// streamColorProfile resolves the color profile for one output stream.
+// terminal reports whether w is a terminal and env is the process
+// environment. ColorAuto disables color unless w is a terminal, TERM is
+// not dumb, and NO_COLOR is empty; ColorAlways takes the profile the
+// environment describes, ignoring NO_COLOR, and raises it to at least
+// ANSI; ColorNever disables color.
+func streamColorProfile(mode ColorMode, w io.Writer, terminal bool, env []string) colorprofile.Profile {
+	switch mode {
+	case ColorNever:
+		return colorprofile.ASCII
+	case ColorAlways:
+		return max(colorprofile.Env(colorDetectionEnvironment(env, "NO_COLOR")), colorprofile.ANSI)
+	}
+	if !terminal || envValue(env, "NO_COLOR") != "" || envValue(env, "TERM") == "dumb" {
 		return colorprofile.ASCII
 	}
-	return colorprofile.Detect(w, terminalColorEnvironment())
+	return colorprofile.Detect(w, colorDetectionEnvironment(env))
 }
 
-func terminalColorEnvironment() []string {
-	// colorprofile.Detect runs tmux info without a timeout when TMUX is present.
-	env := os.Environ()
+// colorDetectionEnvironment returns env without TMUX, which makes
+// colorprofile run tmux info without a timeout, and without the named
+// keys.
+func colorDetectionEnvironment(env []string, dropped ...string) []string {
 	filtered := make([]string, 0, len(env))
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
-		if key != "TMUX" {
+		if key != "TMUX" && !slices.Contains(dropped, key) {
 			filtered = append(filtered, entry)
 		}
 	}
 	return filtered
 }
 
+func envValue(env []string, name string) string {
+	for _, entry := range env {
+		if key, value, _ := strings.Cut(entry, "="); key == name {
+			return value
+		}
+	}
+	return ""
+}
+
 func terminalColorsEnabled(profile colorprofile.Profile) bool {
 	return profile > colorprofile.ASCII
+}
+
+// terminalCursorControl reports whether a terminal described by env accepts
+// the cursor movement and line erase the spinner uses. It is independent
+// of the color profile: an uncolored terminal still carries the spinner,
+// and TERM=dumb or an unset TERM carries neither.
+func terminalCursorControl(env []string) bool {
+	value := envValue(env, "TERM")
+	return value != "" && value != "dumb"
 }
 
 func terminalHasDarkBackground(out *os.File, profile colorprofile.Profile, allowQuery bool) bool {

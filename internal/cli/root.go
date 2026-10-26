@@ -4,15 +4,23 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jmcampanini/brewkit/internal/config"
-	"github.com/jmcampanini/brewkit/internal/docs"
 	"github.com/jmcampanini/brewkit/internal/ui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
+// Process exit statuses; the exit-codes topic documents them.
+const (
+	exitSuccess = 0
+	exitFailure = 1
+	exitUsage   = 2
+)
+
 type globalFlags struct {
+	color         ui.ColorMode
 	dryRun        bool
 	verbose       bool
 	quiet         bool
@@ -33,19 +41,15 @@ func newRootCmd(app *commandContext) *cobra.Command {
 files.
 
 A layer is a name such as work or personal, and each layer has up to
-four files in the configured directory: Tapfile.<layer> (one tap per
-line with an optional URL), Brewfile.<layer> (brew "name" lines),
-Headfile.<layer> (one HEAD-tracked formula per line), and
-Caskfile.<layer> (one cask per line). A *file.local belongs to the
-automatic local layer. Every file accepts
-'# comment' lines and trailing '  # description' comments. 'brewkit
-tap', 'brewkit brew', 'brewkit head', and 'brewkit cask' each apply one
-file kind for every layer in order, and a full run is those four
-commands in that order. 'brewkit lint' checks the files' style,
-'brewkit config' prints the configuration in effect, and 'brewkit docs'
-prints the embedded manual.
+four files in the configured directory: Tapfile.<layer>,
+Brewfile.<layer>, Headfile.<layer>, and Caskfile.<layer>. The
+*file.local files belong to the automatic local layer. The apply
+commands each apply one file kind for every selected layer in order,
+then local, and never remove a tap, formula, or cask that is not
+listed. 'brewkit help layers' explains the layer scheme and 'brewkit
+help layer-files' the file formats and editing conventions.
 
-` + docs.ConfigDiscoveryHelp + `
+` + configDiscoveryHelp + `
 
 The global flags apply to every command. --dry-run makes the apply
 commands report what they would change without running any brew command
@@ -54,28 +58,38 @@ changed entry and the offending line under each lint violation; --quiet
 (-q) limits the apply commands and lint to errors; the two cannot be
 combined. --output-prefix TEXT prefixes every line brewkit writes,
 including errors and progress, except help and version output.
---config, --layers, and --layer are described under 'brewkit config
---help'.
+--color MODE decides whether the output brewkit itself renders is
+colored: auto (the default) colors a stream only when it is a terminal,
+TERM is not dumb, and NO_COLOR is empty; always colors every stream
+even when it is not a terminal or NO_COLOR is set; never disables
+color. brew's captured output passes through unchanged, and the config
+report and lint findings never carry color. --config, --layers, and
+--layer are described under 'brewkit config --help'.
 
 Command payloads go to stdout: per-entry results and the summary from the
-apply commands, lint findings, the config report, and the manual. Errors
-and transient progress go to stderr, and a failure ends with 'brewkit:
-<message>' on stderr. Color is decided per stream: a stream is colored
-only when it is a terminal, a nonempty NO_COLOR disables color on both,
-and the light or dark palette follows COLORFGBG when set, otherwise a
-terminal background query when stdin and the stream are terminals and
---quiet is not set, otherwise the dark palette. brewkit never prompts.
-It runs Homebrew's brew from PATH with stdin disconnected and output
-captured until each command ends, so brew cannot read an answer from
-brewkit's stdin and any prompt text appears only in the captured output;
-'brewkit head' also runs git. No other program is run.
+apply commands, lint findings, and the config report. Errors and
+transient progress go to stderr, and a failure ends with 'brewkit:
+<message>' on stderr. Color is decided per stream, and the light or
+dark palette follows COLORFGBG when set, otherwise one terminal
+background query when a colored stream and stdin are terminals and
+--quiet is not set, otherwise the dark palette. The progress line
+needs stdout and stderr to be terminals and a TERM other than dumb;
+without them the apply commands print only their durable lines.
+brewkit never prompts. It runs Homebrew's brew from PATH with stdin
+disconnected and output captured until each command ends, so brew
+cannot read an answer from brewkit's stdin and any prompt text appears
+only in the captured output; 'brewkit head' also runs git. No other
+program is run.
 
 Run 'brewkit config --help' for configuration precedence and the
-brewkit.toml keys, 'brewkit help exit-codes' for exit-status meanings,
-and 'brewkit docs' for the file-format and lint-rule manual.`,
-		Example: `  brewkit tap && brewkit brew && brewkit head && brewkit cask
-  brewkit --layers work,personal brew --dry-run
-  BREWKIT_LAYERS=work brewkit cask ghostty`,
+brewkit.toml keys and 'brewkit help exit-codes' for the exit statuses.
+
+Common tasks:
+  Lint the files:    brewkit lint
+  Apply all files:   brewkit tap && brewkit brew && brewkit head && brewkit cask
+  Preview changes:   brewkit --layers work,personal brew --dry-run
+  Apply one entry:   BREWKIT_LAYERS=work brewkit cask ghostty
+  Print the config:  brewkit config`,
 		Version: Version,
 		// An unknown command reports only unknown command "x" for "brewkit",
 		// the same message the subcommands give, with no suggestion list.
@@ -92,20 +106,26 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 		panic(err)
 	}
 	app.configFlagSet = persistentFlags
+	persistentFlags.Var(&app.flags.color, "color", "color output: auto|always|never")
 	persistentFlags.BoolVar(&app.flags.dryRun, "dry-run", false, "compute changes without applying them")
 	persistentFlags.BoolVarP(&app.flags.verbose, "verbose", "v", false, "add brew output and lint line text; not with -q")
 	persistentFlags.BoolVarP(&app.flags.quiet, "quiet", "q", false, "errors only (apply commands, lint); not with -v")
 	persistentFlags.StringVar(&app.flags.outputPrefix, "output-prefix", "", "prefix output lines (not help or version)")
 	root.MarkFlagsMutuallyExclusive("quiet", "verbose")
 
+	root.AddGroup(
+		&cobra.Group{ID: commandGroupID, Title: "Commands:"},
+		&cobra.Group{ID: helpTopicGroupID, Title: "Help topics:"},
+	)
 	root.AddCommand(newTapCmd(app))
 	root.AddCommand(newBrewCmd(app))
 	root.AddCommand(newHeadCmd(app))
 	root.AddCommand(newCaskCmd(app))
 	root.AddCommand(newLintCmd(app))
 	root.AddCommand(newConfigCmd(app))
-	root.AddCommand(newDocsCmd(app))
-	root.AddCommand(newExitCodesTopic(app))
+	root.AddCommand(newLayersTopic())
+	root.AddCommand(newLayerFilesTopic())
+	root.AddCommand(newExitCodesTopic())
 
 	// Cobra registers --help and --version inside Execute, after Find has
 	// already stripped flags to locate the subcommand. Without the flags
@@ -118,16 +138,55 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 	return root
 }
 
-// Execute runs the command and returns its process exit status.
+// commandGroupID is the cobra group of the commands that do work; the root
+// help lists them before the help topics.
+const commandGroupID = "commands"
+
+// Execute runs the command and returns its process exit status: 0 on
+// success, 2 when the invocation was rejected before any command ran, and
+// 1 for every other failure.
 func Execute() int {
 	app := &commandContext{}
-	if err := newRootCmd(app).Execute(); err != nil {
+	root := newRootCmd(app)
+	started := false
+	markCommandStart(root, &started)
+	if err := root.Execute(); err != nil {
 		printError(err, app.flags.outputPrefix)
-		return 1
+		if !started {
+			return exitUsage
+		}
+		return exitFailure
 	}
-	return 0
+	return exitSuccess
 }
 
+// markCommandStart wraps every runner in the tree so started records that
+// cobra accepted the invocation. Cobra validates the flag groups after the
+// pre-run hooks, so entering a runner is the only point that proves command
+// lookup, flag parsing, the positional grammar, and the flag groups all
+// passed; an error before it is a usage error.
+func markCommandStart(cmd *cobra.Command, started *bool) {
+	if run := cmd.RunE; run != nil {
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			*started = true
+			return run(cmd, args)
+		}
+	}
+	if run := cmd.Run; run != nil {
+		cmd.Run = func(cmd *cobra.Command, args []string) {
+			*started = true
+			run(cmd, args)
+		}
+	}
+	for _, child := range cmd.Commands() {
+		markCommandStart(child, started)
+	}
+}
+
+// printError writes the failure as one 'brewkit: <message>' line. An error
+// that joins several failures renders them on separate lines, so the
+// newlines are folded into one line.
 func printError(err error, prefix string) {
-	_, _ = fmt.Fprintln(ui.NewLinePrefixWriter(os.Stderr, prefix), "brewkit:", err)
+	message := strings.NewReplacer("\r\n", "; ", "\n", "; ").Replace(err.Error())
+	_, _ = fmt.Fprintln(ui.NewLinePrefixWriter(os.Stderr, prefix), "brewkit:", message)
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"github.com/jmcampanini/brewkit/internal/docs"
 	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/spf13/cobra"
 )
@@ -18,9 +17,9 @@ Brewfile of each layer in order. For each entry brewkit runs
 installed version. A name may be qualified as user/tap/name; it also
 matches the installed short name. Formulas are never uninstalled.
 
-` + docs.BrewStateHelp,
+` + brewStateHelp,
 		example: `  brewkit brew
-  brewkit --layers work,personal brew --dry-run
+  brewkit brew --dry-run
   brewkit brew ripgrep`,
 	})
 	cmd.Flags().BoolVar(&app.flags.hideUnchanged, "hide-unchanged", false, "hide lines for entries already satisfied")
