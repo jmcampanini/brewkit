@@ -107,16 +107,15 @@ func ValidateSelected(name string) error {
 	return nil
 }
 
-// HasFiles reports whether any file of the named layer exists in dir.
+// HasFiles reports whether any path of the named layer exists in dir. A
+// directory counts, so the command that reads it reports the error.
 func HasFiles(dir, name string) (bool, error) {
 	for _, k := range AllKinds {
 		path := PathFor(dir, k, name)
-		info, err := os.Stat(path)
+		_, err := os.Stat(path)
 		switch {
 		case err == nil:
-			if !info.IsDir() {
-				return true, nil
-			}
+			return true, nil
 		case errors.Is(err, fs.ErrNotExist):
 			continue
 		default:

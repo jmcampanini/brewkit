@@ -78,7 +78,7 @@ func TestHasFiles(t *testing.T) {
 	}{
 		{name: BaseName, want: true},
 		{name: LocalName, want: true},
-		{name: "work"},
+		{name: "work", want: true},
 		{name: "absent"},
 	} {
 		got, err := HasFiles(dir, tt.name)

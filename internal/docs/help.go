@@ -17,14 +17,16 @@ the current working directory rather than the location of brewkit.toml.`
 const LayerSelectionHelp = `The layers come from the highest-priority input that sets them: the
 flags --layers LIST (comma-separated) and --layer NAME (repeatable),
 which combine into one list, replace BREWKIT_LAYERS (comma-separated),
-which replaces layers in brewkit.toml. Each environment variable named
-in env_layers is then read in order and its comma-separated value is
-appended. Environment and flag values are split on commas and trimmed,
-and blank items are dropped, so --layers "" clears the list. Duplicates
-are dropped keeping the last occurrence, so work,laptop,work selects
-laptop then work. A layer name is 1 to 64 characters of lowercase
-letters and digits in groups separated by single hyphens, such as work
-or work-laptop; any other name is an error. The names base and local
+which replaces layers in brewkit.toml. --layers and BREWKIT_LAYERS are
+split on commas, --layer takes one name, and every flag and environment
+item is trimmed; --layers "" or an empty BREWKIT_LAYERS clears the
+list. Each environment variable named in env_layers is then read in
+order; its value is split on commas, trimmed, and appended with blank
+items dropped. Duplicates are dropped keeping the last occurrence, so
+work,laptop,work selects laptop then work. A layer name is 1 to 64
+characters of lowercase letters and digits in groups separated by
+single hyphens, such as work or work-laptop; any other name, including
+a blank item, is an error. The names base and local
 cannot be selected: base is the unsuffixed Tapfile, Brewfile, Headfile,
 or Caskfile and local is the *file.local files, and each applies
 whenever one of its files exists in dir. The apply commands walk base,

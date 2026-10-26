@@ -52,8 +52,8 @@ comma-separated list, or repeat --layer to add one layer per flag:
   brewkit --layer work --layer personal brew
 
 An explicitly empty list such as --layers "" or BREWKIT_LAYERS= clears
-the raw layers. Environment and flag items are trimmed, blank items are
-dropped, and a TOML item is used exactly as written.
+the raw layers. Flag and environment items are trimmed; a TOML item is
+used exactly as written. Any other blank item is an error.
 
 The effective layers are derived once: the raw `layers`, then the
 values of the variables named by `env_layers` appended in order, then

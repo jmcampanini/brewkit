@@ -37,7 +37,7 @@ func (app *commandContext) runLint(_ context.Context) error {
 	// lint scans every layer that has a file in the directory.
 	layers := effective.Layers
 	if !app.layerFlagChanged() {
-		layers, err = layer.Discover(effective.Dir)
+		layers, err = layer.Discover(effective.Config.Dir)
 		if err != nil {
 			return err
 		}
@@ -46,7 +46,7 @@ func (app *commandContext) runLint(_ context.Context) error {
 	var violations []lint.Violation
 	for _, name := range layers {
 		for _, k := range layer.AllKinds {
-			path := layer.PathFor(effective.Dir, k, name)
+			path := layer.PathFor(effective.Config.Dir, k, name)
 			_, statErr := os.Stat(path)
 			if errors.Is(statErr, fs.ErrNotExist) {
 				continue

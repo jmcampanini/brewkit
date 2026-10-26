@@ -49,7 +49,9 @@ type Effective struct {
 	// environment, and flags have been applied.
 	Config Config
 
-	// Dir is Config.Dir made absolute.
+	// Dir is Config.Dir made absolute, reported as effective_dir. Commands
+	// read files through Config.Dir so the paths they print keep the form
+	// the person wrote.
 	Dir string
 
 	// Layers is the effective layers: the raw layers plus the env_layers
@@ -109,7 +111,7 @@ func Load(flags *pflag.FlagSet) (Effective, error) {
 	if err != nil {
 		return Effective{}, err
 	}
-	order, err := layerOrder(dir, layers)
+	order, err := layerOrder(cfg.Dir, layers)
 	if err != nil {
 		return Effective{}, err
 	}
@@ -169,21 +171,26 @@ func newFileLoader(flags *pflag.FlagSet) (configloader.ConfigLoader[Config], err
 }
 
 // effectiveLayers combines the raw layers with the env_layers additions,
-// drops blank items, keeps the last occurrence of each name, and validates
-// every survivor. Items from the environment and flags arrive trimmed; a
-// TOML item is used exactly as written.
+// keeps the last occurrence of each name, and validates every survivor.
+// The loader delivers --layers "" and a whitespace-only BREWKIT_LAYERS as
+// [""], so that one shape is the cleared list rather than a blank name.
 func effectiveLayers(cfg Config) ([]string, error) {
 	combined := append([]string(nil), cfg.Layers...)
+	if len(combined) == 1 && combined[0] == "" {
+		combined = nil
+	}
 	for _, variable := range cfg.EnvLayers {
 		if variable == "" || strings.TrimSpace(variable) != variable {
 			return nil, fmt.Errorf("env_layers entry %q must be a variable name without surrounding whitespace", variable)
 		}
 		for _, item := range strings.Split(os.Getenv(variable), ",") {
-			combined = append(combined, strings.TrimSpace(item))
+			if name := strings.TrimSpace(item); name != "" {
+				combined = append(combined, name)
+			}
 		}
 	}
 
-	layers := keepLastOccurrence(dropBlank(combined))
+	layers := keepLastOccurrence(combined)
 	for _, name := range layers {
 		if err := layer.ValidateSelected(name); err != nil {
 			return nil, err
@@ -211,17 +218,6 @@ func layerOrder(dir string, layers []string) ([]string, error) {
 		order = append(order, layer.LocalName)
 	}
 	return order, nil
-}
-
-// dropBlank returns the items of values that hold more than whitespace.
-func dropBlank(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			out = append(out, value)
-		}
-	}
-	return out
 }
 
 func keepLastOccurrence(values []string) []string {

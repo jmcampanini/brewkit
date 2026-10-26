@@ -52,7 +52,7 @@ func newApplyCmd(app *commandContext, spec applyCommandSpec) *cobra.Command {
 			}
 			return apply.Run(cmd.Context(), spec.kind, args, apply.Options{
 				Brewer:   brewerFactory(),
-				Dir:      effective.Dir,
+				Dir:      effective.Config.Dir,
 				DryRun:   app.flags.dryRun,
 				FailFast: effective.Config.FailFast,
 				Layers:   effective.LayerOrder,
