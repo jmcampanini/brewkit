@@ -9,21 +9,21 @@ func newExitCodesTopic(_ *commandContext) *cobra.Command {
 		Long: `brewkit exits 0 or 1; the exit status of brew is never passed through:
 
   0  Success. Reported outcomes that are not failures also exit 0: an
-     apply run where every entry was already satisfied or every profile
-     lacked the file, a --dry-run preview whose checks all passed, 'lint'
-     finding no violations, and --help, --version, a bare 'brewkit', or
-     'brewkit help <command>' printing help. 'brewkit help' with an
-     unknown topic prints 'Unknown help topic' and the usage on stderr
-     and still exits 0.
+     apply run where every entry was already satisfied, every layer
+     lacked the file, or no layer applied, a --dry-run preview whose
+     checks all passed, 'lint' finding no violations, and --help,
+     --version, a bare 'brewkit', or 'brewkit help <command>' printing
+     help. 'brewkit help' with an unknown topic prints 'Unknown help
+     topic' and the usage on stderr and still exits 0.
   1  Any failure. Usage errors (an unknown command or flag, an operand
      on 'lint', 'config', 'docs', or 'exit-codes', a second operand on
      an apply command, or --quiet together with --verbose) fail before
-     any file is read or any program runs. Those and a --config file
-     that does not exist, an unknown key or an empty dir in
-     brewkit.toml, an invalid profile list (local listed explicitly, an
-     empty name, or no active profile for an apply command), an operand
-     that matches no entry, a profile file that cannot be read, an
-     invalid line in a profile file, and 'lint' with at least one
+     any file is read or any program runs. Those and a --config path
+     that is empty or does not exist, an unknown key or an empty dir in
+     brewkit.toml, a blank or whitespace-padded env_layers entry, a
+     layer name that fails the grammar or names base or local, an
+     operand that matches no entry, a layer file that cannot be read,
+     an invalid line in a layer file, and 'lint' with at least one
      violation end with 'brewkit: <message>' on stderr. A brew install,
      upgrade, tap, uninstall, or fetch that exits nonzero, and a HEAD
      check that fails, print '✗ <name>: <reason>' and brew's captured

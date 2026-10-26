@@ -11,15 +11,30 @@ import (
 	"testing"
 
 	"github.com/jmcampanini/brewkit/internal/brew"
-	"github.com/jmcampanini/brewkit/internal/profile"
+	"github.com/jmcampanini/brewkit/internal/config"
+	"github.com/jmcampanini/brewkit/internal/layer"
+	"github.com/spf13/pflag"
 )
 
 var testApp = &commandContext{}
 
-// resetFlags gives each test fresh command state.
+// resetFlags gives each test fresh command state with the config-backed
+// flags registered but unset.
 func resetFlags() {
-	testApp = &commandContext{}
-	_ = os.Unsetenv("BREWKIT_PROFILES")
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	if err := config.RegisterFlags(flags); err != nil {
+		panic(err)
+	}
+	testApp = &commandContext{configFlagSet: flags}
+	_ = os.Unsetenv("BREWKIT_LAYERS")
+}
+
+// useConfigFile points --config at path for the current testApp.
+func useConfigFile(t *testing.T, path string) {
+	t.Helper()
+	if err := testApp.configFlagSet.Set("config", path); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func useBrewer(t *testing.T, brewer brew.Brewer) {
@@ -79,15 +94,15 @@ func readPipe(r *os.File) <-chan string {
 	return done
 }
 
-// fixtureRepo writes a brewkit.toml plus the requested profile files in a
-// temp directory and returns its path.
+// fixtureRepo writes a brewkit.toml selecting the common layer plus the
+// requested layer files in a temp directory and returns its path.
 func fixtureRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["common"]` + "\n" +
-		`env_profiles = ""` + "\n"
+		`layers = ["common"]` + "\n" +
+		`env_layers = []` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +145,7 @@ func TestRunApply_ConfigOmittedDir_ResolvesAgainstProcessCWD(t *testing.T) {
 	configDir := t.TempDir()
 	tomlPath := filepath.Join(configDir, "brewkit.toml")
 	if err := os.WriteFile(tomlPath,
-		[]byte(`profiles = ["common"]`+"\n"+`env_profiles = ""`+"\n"), 0o644); err != nil {
+		[]byte(`layers = ["common"]`+"\n"+`env_layers = []`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,20 +156,20 @@ func TestRunApply_ConfigOmittedDir_ResolvesAgainstProcessCWD(t *testing.T) {
 	}
 	t.Chdir(cwd)
 
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
 
 	if !strings.Contains(out, "+ git") {
-		t.Errorf("expected '+ git' in output - profile files must be discovered under process CWD:\n%s", out)
+		t.Errorf("expected '+ git' in output - layer files must be discovered under process CWD:\n%s", out)
 	}
 }
 
@@ -165,13 +180,13 @@ func TestRunApply_Tap_Adds(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Tapfile.common": `charmbracelet/tap` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindTap, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindTap, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -191,14 +206,14 @@ func TestRunApply_Brew_DryRun(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "ripgrep"  # search` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -219,7 +234,7 @@ func TestRunApply_Brew_OutputPrefix(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "ripgrep"  # search` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.dryRun = true
 	testApp.flags.outputPrefix = "  "
 
@@ -227,7 +242,7 @@ func TestRunApply_Brew_OutputPrefix(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -245,14 +260,14 @@ func TestRunApply_Brew_QuietSuccessSilent(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "ripgrep"  # search` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.quiet = true
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out, errOut := captureOutput(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -279,7 +294,7 @@ func TestRunApply_Brew_QuietFailureShowsErrorOutputNoSummary(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "borked"  # broken` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.quiet = true
 
 	fake := &outputFailFake{Fake: brew.NewFake(), output: "==> Downloading\nError: nope\n"}
@@ -287,7 +302,7 @@ func TestRunApply_Brew_QuietFailureShowsErrorOutputNoSummary(t *testing.T) {
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
-		runErr = runApply(context.Background(), profile.KindBrew, nil)
+		runErr = runApply(context.Background(), layer.KindBrew, nil)
 	})
 
 	if runErr == nil {
@@ -313,7 +328,7 @@ func TestRunApply_Brew_UpgradesAndUpToDate(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "neovim"  # editor` + "\n" + `brew "git"     # vcs` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.FormulasMap["neovim"] = brew.FormulaState{
@@ -323,7 +338,7 @@ func TestRunApply_Brew_UpgradesAndUpToDate(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -348,7 +363,7 @@ func TestRunApply_Brew_HideUnchangedKeepsChangesAndSummary(t *testing.T) {
 			`brew "neovim"   # editor` + "\n" +
 			`brew "git"      # vcs` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.hideUnchanged = true
 
 	fake := brew.NewFake()
@@ -359,7 +374,7 @@ func TestRunApply_Brew_HideUnchangedKeepsChangesAndSummary(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -385,7 +400,7 @@ func TestRunApply_Tap_HideUnchanged(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Tapfile.common": `homebrew/core` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.hideUnchanged = true
 
 	fake := brew.NewFake()
@@ -394,7 +409,7 @@ func TestRunApply_Tap_HideUnchanged(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindTap, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindTap, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -414,7 +429,7 @@ func TestRunApply_Cask_HideUnchanged(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Caskfile.common": `iterm2  # terminal` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.hideUnchanged = true
 
 	fake := brew.NewFake()
@@ -422,7 +437,7 @@ func TestRunApply_Cask_HideUnchanged(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindCask, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindCask, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -442,7 +457,7 @@ func TestRunApply_Cask_RestartNotice(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Caskfile.common": `claude  # AI` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.CasksMap["claude"] = brew.CaskState{
@@ -451,7 +466,7 @@ func TestRunApply_Cask_RestartNotice(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindCask, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindCask, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -462,24 +477,33 @@ func TestRunApply_Cask_RestartNotice(t *testing.T) {
 }
 
 func TestRunApply_MissingFileNotice(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+		want  string
+	}{
+		{name: "selected layer", want: "⊘ common: no Brewfile, skipping\nSummary: 1 skipped\n"},
+		{name: "automatic layers with another kind", files: map[string]string{"Tapfile": "", "Tapfile.local": ""},
+			want: "⊘ base: no Brewfile, skipping\n⊘ common: no Brewfile, skipping\n⊘ local: no Brewfile, skipping\nSummary: 3 skipped\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			defer resetFlags()
+			dir := fixtureRepo(t, tt.files)
+			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
+			fake := brew.NewFake()
+			useBrewer(t, fake)
 
-	dir := fixtureRepo(t, map[string]string{}) // no profile files
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+			out := captureStdout(t, func() {
+				if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
+					t.Errorf("runApply err: %v", err)
+				}
+			})
 
-	fake := brew.NewFake()
-	useBrewer(t, fake)
-
-	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
-			t.Errorf("runApply err: %v", err)
-		}
-	})
-
-	want := "⊘ common: no Brewfile, skipping\nSummary: 1 skipped\n"
-	if out != want {
-		t.Errorf("unexpected missing-file notice:\nwant: %q\ngot:  %q", want, out)
+			if out != tt.want {
+				t.Errorf("unexpected missing-file notice:\nwant: %q\ngot:  %q", tt.want, out)
+			}
+		})
 	}
 }
 
@@ -487,50 +511,71 @@ func TestRunApply_MissingFileQuietSilent(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
-	dir := fixtureRepo(t, map[string]string{}) // no profile files
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	dir := fixtureRepo(t, map[string]string{}) // no layer files
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.quiet = true
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out, errOut := captureOutput(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
 
 	if out != "" || errOut != "" {
-		t.Errorf("quiet run with missing profile files should be silent; stdout=%q stderr=%q", out, errOut)
+		t.Errorf("quiet run with missing layer files should be silent; stdout=%q stderr=%q", out, errOut)
 	}
 }
 
-func TestRunApply_NoActiveProfilesErrors(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
+func TestRunApply_LayerOrder(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		layers string
+		files  map[string]string
+		want   string
+	}{
+		{name: "nothing available", layers: `[]`, want: "Summary: nothing to do\n"},
+		{name: "empty selection applies base then local", layers: `[]`, files: map[string]string{
+			"Brewfile":        `brew "git"  # vcs` + "\n",
+			"Brewfile.local":  `brew "jq"  # json` + "\n",
+			"Brewfile.common": `brew "ripgrep"  # not selected` + "\n",
+		}, want: "+ git (dry-run)\n+ jq (dry-run)\nSummary: 2 added\n"},
+		{name: "selected layers sit between base and local", layers: `["work", "laptop", "work"]`, files: map[string]string{
+			"Brewfile":        `brew "base-entry"    # base` + "\n",
+			"Brewfile.laptop": `brew "laptop-entry"  # laptop` + "\n",
+			"Brewfile.work":   `brew "work-entry"    # work` + "\n",
+			"Brewfile.local":  `brew "local-entry"   # local` + "\n",
+		}, want: "+ base-entry (dry-run)\n+ laptop-entry (dry-run)\n+ work-entry (dry-run)\n+ local-entry (dry-run)\nSummary: 4 added\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			defer resetFlags()
+			dir := t.TempDir()
+			tomlPath := filepath.Join(dir, "brewkit.toml")
+			if err := os.WriteFile(tomlPath, []byte(`dir = "`+dir+`"`+"\n"+`layers = `+tt.layers+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for name, contents := range tt.files {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			useConfigFile(t, tomlPath)
+			testApp.flags.dryRun = true
+			useBrewer(t, brew.NewFake())
 
-	dir := t.TempDir()
-	tomlPath := filepath.Join(dir, "brewkit.toml")
-	if err := os.WriteFile(tomlPath, []byte(`dir = "`+dir+`"`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "Brewfile.common"), []byte(`brew "git"  # vcs`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	testApp.flags.configPath = tomlPath
+			out := captureStdout(t, func() {
+				if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
+					t.Errorf("runApply err: %v", err)
+				}
+			})
 
-	fake := brew.NewFake()
-	useBrewer(t, fake)
-
-	err := runApply(context.Background(), profile.KindBrew, nil)
-	if err == nil {
-		t.Fatal("expected no-active-profiles error")
-	}
-	if !strings.Contains(err.Error(), "no active profiles") {
-		t.Fatalf("error = %v, want no active profiles", err)
-	}
-	if len(fake.Calls) != 0 {
-		t.Fatalf("no active profiles should not call brewer, got %+v", fake.Calls)
+			if out != tt.want {
+				t.Errorf("unexpected output:\nwant: %q\ngot:  %q", tt.want, out)
+			}
+		})
 	}
 }
 
@@ -541,14 +586,14 @@ func TestRunApply_PositionalFilter(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "git"     # vcs` + "\n" + `brew "neovim"  # editor` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, []string{"git"}); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, []string{"git"}); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -568,14 +613,14 @@ func TestRunApply_Tap_FailureAborts(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Tapfile.common": `broken/tap` + "\n" + `other/tap` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpTap] = map[string]bool{"broken/tap": true}
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		err := runApply(context.Background(), profile.KindTap, nil)
+		err := runApply(context.Background(), layer.KindTap, nil)
 		if err == nil {
 			t.Error("expected runApply to error on tap failure")
 		}
@@ -592,7 +637,7 @@ func TestRunApply_Brew_UpgradeFailure(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "neovim"  # editor` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.FormulasMap["neovim"] = brew.FormulaState{
@@ -602,7 +647,7 @@ func TestRunApply_Brew_UpgradeFailure(t *testing.T) {
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err == nil {
 			t.Error("expected runApply to error on upgrade failure")
 		}
 	})
@@ -619,7 +664,7 @@ func TestRunApply_Cask_UpgradeFailure_NoRestartNotice(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Caskfile.common": `claude  # AI` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.CasksMap["claude"] = brew.CaskState{
@@ -629,7 +674,7 @@ func TestRunApply_Cask_UpgradeFailure_NoRestartNotice(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindCask, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindCask, nil); err == nil {
 			t.Error("expected runApply to error on cask upgrade failure")
 		}
 	})
@@ -645,14 +690,14 @@ func TestRunApply_Cask_InstallFailure(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Caskfile.common": `antinote  # notes` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpCaskInstall] = map[string]bool{"antinote": true}
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindCask, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindCask, nil); err == nil {
 			t.Error("expected runApply to error on cask install failure")
 		}
 	})
@@ -668,14 +713,14 @@ func TestRunApply_FailFastTrue_StopsImmediately(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "borked"  # fails` + "\n" + `brew "later"  # should be skipped` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpBrewInstall] = map[string]bool{"borked": true}
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err == nil {
 			t.Error("expected runApply to error")
 		}
 	})
@@ -694,8 +739,8 @@ func TestRunApply_FailFastFalse_ContinuesAndReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["common"]` + "\n" +
-		`env_profiles = ""` + "\n" +
+		`layers = ["common"]` + "\n" +
+		`env_layers = []` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -704,14 +749,14 @@ func TestRunApply_FailFastFalse_ContinuesAndReturnsError(t *testing.T) {
 		[]byte(`brew "borked"   # broken`+"\n"+`brew "alright"  # ok`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 
 	fake := brew.NewFake()
 	fake.FailOps[brew.OpBrewInstall] = map[string]bool{"borked": true}
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		err := runApply(context.Background(), profile.KindBrew, nil)
+		err := runApply(context.Background(), layer.KindBrew, nil)
 		if err == nil {
 			t.Error("expected aggregated error")
 		}
@@ -729,13 +774,13 @@ func TestRunApply_QualifiedNameCachedUnderShortName(t *testing.T) {
 		"Brewfile.common": `brew "user/tap/foo"  # qualified` + "\n" +
 			`brew "foo"           # short` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -787,13 +832,13 @@ func TestRunApply_Head_InstalledSHAError(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `tmux  # mux` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := &headInstalledErrFake{Fake: brew.NewFake(), errName: "tmux"}
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err == nil {
 			t.Error("expected runApply to error on HeadInstalledSHA failure")
 		}
 	})
@@ -806,7 +851,7 @@ func TestRunApply_Head_LatestSHAError(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `tmux  # mux` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	base := brew.NewFake()
 	base.HeadInstalls["tmux"] = "abc1234"
@@ -814,7 +859,7 @@ func TestRunApply_Head_LatestSHAError(t *testing.T) {
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err == nil {
 			t.Error("expected runApply to error on HeadLatestSHA failure")
 		}
 	})
@@ -833,7 +878,7 @@ func TestRunApply_Head_InstallFailure(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `tmux  # mux` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.HeadLatest["tmux"] = "abc1234"
@@ -842,7 +887,7 @@ func TestRunApply_Head_InstallFailure(t *testing.T) {
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err == nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err == nil {
 			t.Error("expected runApply to error on HeadInstall failure")
 		}
 	})
@@ -855,7 +900,7 @@ func TestRunApply_Head_SHAMoved_DryRun(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `tmux  # mux` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
@@ -864,7 +909,7 @@ func TestRunApply_Head_SHAMoved_DryRun(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -886,7 +931,7 @@ func TestRunApply_Head_SHAMoved_RealRun(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `tmux  # mux` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.HeadInstalls["tmux"] = "oldsha0"
@@ -894,7 +939,7 @@ func TestRunApply_Head_SHAMoved_RealRun(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -927,13 +972,13 @@ func TestRunApply_EnsureStateFailure(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "git"  # vcs` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := &stateFailProbe{Fake: brew.NewFake()}
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		err := runApply(context.Background(), profile.KindBrew, nil)
+		err := runApply(context.Background(), layer.KindBrew, nil)
 		if err == nil {
 			t.Error("expected runApply to error when State fails")
 		}
@@ -950,7 +995,7 @@ func TestRunApply_Head_InstalledStableErrorsNoReinstall(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `direnv  # stable install only` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	base := brew.NewFake()
 	base.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
@@ -959,7 +1004,7 @@ func TestRunApply_Head_InstalledStableErrorsNoReinstall(t *testing.T) {
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
-		runErr = runApply(context.Background(), profile.KindHead, nil)
+		runErr = runApply(context.Background(), layer.KindHead, nil)
 	})
 
 	if runErr == nil || !strings.Contains(runErr.Error(), "installed but not as HEAD") {
@@ -985,7 +1030,7 @@ func TestRunApply_Head_InstalledStableWithoutHeadSourceErrorsNoReinstall(t *test
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `direnv  # no source upstream` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	fake.FormulasMap["direnv"] = brew.FormulaState{Installed: true, Version: "2.37.1"}
@@ -993,7 +1038,7 @@ func TestRunApply_Head_InstalledStableWithoutHeadSourceErrorsNoReinstall(t *test
 
 	var runErr error
 	_, errOut := captureOutput(t, func() {
-		runErr = runApply(context.Background(), profile.KindHead, nil)
+		runErr = runApply(context.Background(), layer.KindHead, nil)
 	})
 
 	if runErr == nil || !strings.Contains(runErr.Error(), "installed but not as HEAD") {
@@ -1016,7 +1061,7 @@ func TestRunApply_Head_NoSourceErrorsNoInstall(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `lonely  # no head source upstream` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.hideUnchanged = true
 
 	fake := brew.NewFake()
@@ -1026,7 +1071,7 @@ func TestRunApply_Head_NoSourceErrorsNoInstall(t *testing.T) {
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
-		runErr = runApply(context.Background(), profile.KindHead, nil)
+		runErr = runApply(context.Background(), layer.KindHead, nil)
 	})
 
 	if runErr == nil || !strings.Contains(runErr.Error(), "no HEAD source") {
@@ -1045,15 +1090,15 @@ func TestRunApply_Head_NoSourceErrorsNoInstall(t *testing.T) {
 	}
 }
 
-func TestRunApply_DryRun_LayeredProfilesProjectsState(t *testing.T) {
+func TestRunApply_DryRun_LayersProjectState(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["a", "b"]` + "\n" +
-		`env_profiles = ""` + "\n"
+		`layers = ["a", "b"]` + "\n" +
+		`env_layers = []` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1065,14 +1110,14 @@ func TestRunApply_DryRun_LayeredProfilesProjectsState(t *testing.T) {
 		[]byte(`brew "ripgrep"  # search`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -1115,8 +1160,8 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["common"]` + "\n" +
-		`env_profiles = ""` + "\n" +
+		`layers = ["common"]` + "\n" +
+		`env_layers = []` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -1125,7 +1170,7 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 		[]byte(`brew "alpha"  # a`+"\n"+`brew "bravo"  # b`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 
 	errAlpha := fmt.Errorf("alpha sentinel")
 	errBravo := fmt.Errorf("bravo sentinel")
@@ -1137,7 +1182,7 @@ func TestRunApply_AggregatedErrors_UnwrapWalk(t *testing.T) {
 
 	var runErr error
 	captureStdout(t, func() {
-		runErr = runApply(context.Background(), profile.KindBrew, nil)
+		runErr = runApply(context.Background(), layer.KindBrew, nil)
 	})
 	if runErr == nil {
 		t.Fatal("expected aggregated error")
@@ -1160,8 +1205,8 @@ func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["common"]` + "\n" +
-		`env_profiles = ""` + "\n" +
+		`layers = ["common"]` + "\n" +
+		`env_layers = []` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -1170,7 +1215,7 @@ func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 		[]byte(`lonely  # no source`+"\n"+`tmux  # stable`+"\n"+`ok  # valid`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 
 	fake := brew.NewFake()
 	fake.FormulasMap["tmux"] = brew.FormulaState{Installed: true, Version: "3.4"}
@@ -1182,7 +1227,7 @@ func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 
 	var runErr error
 	out, errOut := captureOutput(t, func() {
-		runErr = runApply(context.Background(), profile.KindHead, nil)
+		runErr = runApply(context.Background(), layer.KindHead, nil)
 	})
 
 	if runErr == nil {
@@ -1211,7 +1256,7 @@ func TestRunApply_Head_FailFastFalseContinuesAfterInvalidEntries(t *testing.T) {
 
 // retryFailFake fails HeadInstall on the first call to a given name
 // but lets subsequent calls succeed. Used to verify the headSeen
-// retry-on-failure invariant in layered profiles. attempts counts
+// retry-on-failure invariant across layers. attempts counts
 // every invocation, including the short-circuited failure.
 //
 // As with sentinelFailFake above, brew.Fake.HeadInstall records before
@@ -1234,19 +1279,19 @@ func (f *retryFailFake) HeadInstall(ctx context.Context, name string) (brew.Resu
 	return f.Fake.HeadInstall(ctx, name)
 }
 
-func TestRunApply_Head_RetryAfterFailure_LayeredProfiles(t *testing.T) {
+func TestRunApply_Head_RetryAfterFailure_AcrossLayers(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
-	// Two layered profiles both list `tmux`. The first invocation
+	// Two layers both list `tmux`. The first invocation
 	// fails transiently, but because fail_fast=false and headSeen is
-	// marked only on success, the second profile's entry gets a
+	// marked only on success, the second layer's entry gets a
 	// second chance and succeeds.
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["a", "b"]` + "\n" +
-		`env_profiles = ""` + "\n" +
+		`layers = ["a", "b"]` + "\n" +
+		`env_layers = []` + "\n" +
 		`fail_fast = false` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
@@ -1259,7 +1304,7 @@ func TestRunApply_Head_RetryAfterFailure_LayeredProfiles(t *testing.T) {
 		[]byte(`tmux  # mux`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 
 	base := brew.NewFake()
 	base.HeadLatest["tmux"] = "abc1234"
@@ -1273,7 +1318,7 @@ func TestRunApply_Head_RetryAfterFailure_LayeredProfiles(t *testing.T) {
 
 	var runErr error
 	out := captureStdout(t, func() {
-		runErr = runApply(context.Background(), profile.KindHead, nil)
+		runErr = runApply(context.Background(), layer.KindHead, nil)
 	})
 
 	if fake.attempts["tmux"] != 2 {
@@ -1292,7 +1337,7 @@ func TestRunApply_Head_RetryAfterFailure_LayeredProfiles(t *testing.T) {
 		t.Errorf("aggregated error should preserve the underlying 'transient failure' text: %v", runErr)
 	}
 	if strings.Contains(out, "already processed") {
-		t.Errorf("second profile must retry, not short-circuit with 'already processed':\n%s", out)
+		t.Errorf("second layer must retry, not short-circuit with 'already processed':\n%s", out)
 	}
 }
 
@@ -1304,13 +1349,13 @@ func TestRunApply_UnknownLineFailsRun(t *testing.T) {
 		"Brewfile.common": `brew "git"  # vcs` + "\n" +
 			`brew "neovim", args: ["with-luajit"]  # broken bundle option` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		err := runApply(context.Background(), profile.KindBrew, nil)
+		err := runApply(context.Background(), layer.KindBrew, nil)
 		if err == nil {
 			t.Error("expected runApply to fail on LineUnknown content")
 		}
@@ -1324,8 +1369,8 @@ func TestRunApply_Head_HideUnchangedHidesUpToDateAndDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["a", "b"]` + "\n" +
-		`env_profiles = ""` + "\n"
+		`layers = ["a", "b"]` + "\n" +
+		`env_layers = []` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1335,7 +1380,7 @@ func TestRunApply_Head_HideUnchangedHidesUpToDateAndDuplicate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Headfile.b"), []byte(`tmux  # mux`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 	testApp.flags.hideUnchanged = true
 
 	fake := brew.NewFake()
@@ -1344,7 +1389,7 @@ func TestRunApply_Head_HideUnchangedHidesUpToDateAndDuplicate(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -1364,8 +1409,8 @@ func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["a", "b"]` + "\n" +
-		`env_profiles = ""` + "\n"
+		`layers = ["a", "b"]` + "\n" +
+		`env_layers = []` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1377,7 +1422,7 @@ func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {
 		[]byte(`tmux  # short`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
@@ -1386,7 +1431,7 @@ func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -1396,15 +1441,15 @@ func TestRunApply_Head_LayeredDedupeCanonicalizesNames(t *testing.T) {
 	}
 }
 
-func TestRunApply_Head_LayeredProfilesDeduped(t *testing.T) {
+func TestRunApply_Head_LayersDeduped(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
 	dir := t.TempDir()
 	tomlPath := filepath.Join(dir, "brewkit.toml")
 	toml := `dir = "` + dir + `"` + "\n" +
-		`profiles = ["a", "b"]` + "\n" +
-		`env_profiles = ""` + "\n"
+		`layers = ["a", "b"]` + "\n" +
+		`env_layers = []` + "\n"
 	if err := os.WriteFile(tomlPath, []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1416,7 +1461,7 @@ func TestRunApply_Head_LayeredProfilesDeduped(t *testing.T) {
 		[]byte(`tmux  # multiplexer`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testApp.flags.configPath = tomlPath
+	useConfigFile(t, tomlPath)
 	testApp.flags.dryRun = true
 
 	fake := brew.NewFake()
@@ -1425,7 +1470,7 @@ func TestRunApply_Head_LayeredProfilesDeduped(t *testing.T) {
 	useBrewer(t, fake)
 
 	out := captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -1452,7 +1497,7 @@ func TestRunApply_Head_DoesNotFetchState(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Headfile.common": `tmux  # multiplexer` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.dryRun = true
 
 	stateFetched := false
@@ -1463,7 +1508,7 @@ func TestRunApply_Head_DoesNotFetchState(t *testing.T) {
 	useBrewer(t, wrapped)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindHead, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindHead, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
@@ -1476,8 +1521,8 @@ func TestRunApply_StateNotFetched_WhenNoFiles(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
-	dir := fixtureRepo(t, map[string]string{}) // no profile files at all
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	dir := fixtureRepo(t, map[string]string{}) // no layer files at all
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	stateFetched := false
 	fake := brew.NewFake()
@@ -1485,12 +1530,12 @@ func TestRunApply_StateNotFetched_WhenNoFiles(t *testing.T) {
 	useBrewer(t, wrapped)
 
 	captureStdout(t, func() {
-		if err := runApply(context.Background(), profile.KindBrew, nil); err != nil {
+		if err := runApply(context.Background(), layer.KindBrew, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
 	if stateFetched {
-		t.Error("brewer.State should not be called when no profile files exist")
+		t.Error("brewer.State should not be called when no layer files exist")
 	}
 }
 
@@ -1512,20 +1557,20 @@ func TestRunApply_PositionalFilter_NotFoundErrors(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "git"  # vcs` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	fake := brew.NewFake()
 	useBrewer(t, fake)
 
 	captureStdout(t, func() {
-		err := runApply(context.Background(), profile.KindBrew, []string{"absent"})
+		err := runApply(context.Background(), layer.KindBrew, []string{"absent"})
 		if err == nil {
 			t.Error("expected not-found error")
 		}
 	})
 }
 
-func runApply(ctx context.Context, kind profile.Kind, args []string) error {
+func runApply(ctx context.Context, kind layer.Kind, args []string) error {
 	cmd := newApplyCmd(testApp, applyCommandSpec{kind: kind})
 	cmd.SetContext(ctx)
 	return cmd.RunE(cmd, args)

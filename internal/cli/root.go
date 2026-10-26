@@ -13,7 +13,6 @@ import (
 )
 
 type globalFlags struct {
-	configPath    string
 	dryRun        bool
 	verbose       bool
 	quiet         bool
@@ -29,21 +28,23 @@ type commandContext struct {
 func newRootCmd(app *commandContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "brewkit",
-		Short: "Multi-profile Homebrew manager",
-		Long: `Apply Homebrew taps, formulas, HEAD formulas, and casks from per-profile
+		Short: "Layered Homebrew manager",
+		Long: `Apply Homebrew taps, formulas, HEAD formulas, and casks from per-layer
 files.
 
-A profile is a name such as work or personal, and each profile has up to
-four files in the configured directory: Tapfile.<profile> (one tap per
-line with an optional URL), Brewfile.<profile> (brew "name" lines),
-Headfile.<profile> (one HEAD-tracked formula per line), and
-Caskfile.<profile> (one cask per line). Every file accepts '# comment'
-lines and trailing '  # description' comments. 'brewkit tap', 'brewkit
-brew', 'brewkit head', and 'brewkit cask' each apply one file kind for
-every active profile in order, and a full run is those four commands in
-that order. 'brewkit lint' checks the files' style, 'brewkit config'
-prints the configuration in effect, and 'brewkit docs' prints the
-embedded manual.
+A layer is a name such as work or personal, and each layer has up to
+four files in the configured directory: Tapfile.<layer> (one tap per
+line with an optional URL), Brewfile.<layer> (brew "name" lines),
+Headfile.<layer> (one HEAD-tracked formula per line), and
+Caskfile.<layer> (one cask per line). An unsuffixed Tapfile, Brewfile,
+Headfile, or Caskfile belongs to the automatic base layer, and a
+*file.local belongs to the automatic local layer. Every file accepts
+'# comment' lines and trailing '  # description' comments. 'brewkit
+tap', 'brewkit brew', 'brewkit head', and 'brewkit cask' each apply one
+file kind for every layer in order, and a full run is those four
+commands in that order. 'brewkit lint' checks the files' style,
+'brewkit config' prints the configuration in effect, and 'brewkit docs'
+prints the embedded manual.
 
 ` + docs.ConfigDiscoveryHelp + `
 
@@ -54,7 +55,7 @@ changed entry and the offending line under each lint violation; --quiet
 (-q) limits the apply commands and lint to errors; the two cannot be
 combined. --output-prefix TEXT prefixes every line brewkit writes,
 including errors and progress, except help and version output.
---config, --profiles, and --profile are described under 'brewkit config
+--config, --layers, and --layer are described under 'brewkit config
 --help'.
 
 Command payloads go to stdout: per-entry results and the summary from the
@@ -74,8 +75,8 @@ Run 'brewkit config --help' for configuration precedence and the
 brewkit.toml keys, 'brewkit help exit-codes' for exit-status meanings,
 and 'brewkit docs' for the file-format and lint-rule manual.`,
 		Example: `  brewkit tap && brewkit brew && brewkit head && brewkit cask
-  brewkit --profiles work,personal brew --dry-run
-  BREWKIT_PROFILES=work brewkit cask ghostty`,
+  brewkit --layers work,personal brew --dry-run
+  BREWKIT_LAYERS=work brewkit cask ghostty`,
 		Version: Version,
 		// An unknown command reports only unknown command "x" for "brewkit",
 		// the same message the subcommands give, with no suggestion list.
@@ -88,7 +89,6 @@ and 'brewkit docs' for the file-format and lint-rule manual.`,
 	}
 
 	persistentFlags := root.PersistentFlags()
-	persistentFlags.StringVar(&app.flags.configPath, "config", "", "config file (default ./brewkit.toml when present)")
 	if err := config.RegisterFlags(persistentFlags); err != nil {
 		panic(err)
 	}

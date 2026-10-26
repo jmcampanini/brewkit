@@ -6,27 +6,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmcampanini/brewkit/internal/layer"
 	"github.com/jmcampanini/brewkit/internal/parse"
-	"github.com/jmcampanini/brewkit/internal/profile"
 )
 
 // TestPinnedFixtures_Clean enforces that the dotfiles snapshots committed
 // under internal/parse/testdata/ remain free of lint violations. These
-// fixtures are the canonical "what well-formed profile files look like"
+// fixtures are the canonical "what well-formed layer files look like"
 // reference for both humans and the parser tests; if a real lint rule
 // flags one of them, either the rule is wrong or the fixture needs to
 // be updated. Either way, this test should fail loudly.
 func TestPinnedFixtures_Clean(t *testing.T) {
 	cases := []struct {
 		path string
-		kind profile.Kind
+		kind layer.Kind
 	}{
-		{"../parse/testdata/Brewfile.common", profile.KindBrew},
-		{"../parse/testdata/Brewfile.personal", profile.KindBrew},
-		{"../parse/testdata/Caskfile.common", profile.KindCask},
-		{"../parse/testdata/Caskfile.personal", profile.KindCask},
-		{"../parse/testdata/Headfile.common", profile.KindHead},
-		{"../parse/testdata/Tapfile.common", profile.KindTap},
+		{"../parse/testdata/Brewfile.common", layer.KindBrew},
+		{"../parse/testdata/Brewfile.personal", layer.KindBrew},
+		{"../parse/testdata/Caskfile.common", layer.KindCask},
+		{"../parse/testdata/Caskfile.personal", layer.KindCask},
+		{"../parse/testdata/Headfile.common", layer.KindHead},
+		{"../parse/testdata/Tapfile.common", layer.KindTap},
 	}
 	for _, tc := range cases {
 		t.Run(filepath.Base(tc.path), func(t *testing.T) {
@@ -46,7 +46,7 @@ func TestPinnedFixtures_Clean(t *testing.T) {
 
 // writeFixture creates a file under t.TempDir and parses it with the
 // appropriate parser for the given kind.
-func writeFixture(t *testing.T, name string, kind profile.Kind, contents string) *parse.File {
+func writeFixture(t *testing.T, name string, kind layer.Kind, contents string) *parse.File {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, name)
@@ -79,7 +79,7 @@ func TestClean_Brewfile(t *testing.T) {
 		`brew "git"            # Distributed VCS`,
 		``,
 	}, "\n")
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	if v := Check(f); len(v) != 0 {
 		t.Errorf("clean Brewfile produced violations: %+v", v)
 	}
@@ -92,7 +92,7 @@ func TestClean_Caskfile(t *testing.T) {
 		`ghostty    # Terminal`,
 		``,
 	}, "\n")
-	f := writeFixture(t, "Caskfile.test", profile.KindCask, contents)
+	f := writeFixture(t, "Caskfile.test", layer.KindCask, contents)
 	if v := Check(f); len(v) != 0 {
 		t.Errorf("clean Caskfile produced violations: %+v", v)
 	}
@@ -104,7 +104,7 @@ func TestClean_Tapfile(t *testing.T) {
 		`example/foo https://example.com/foo`,
 		``,
 	}, "\n")
-	f := writeFixture(t, "Tapfile.test", profile.KindTap, contents)
+	f := writeFixture(t, "Tapfile.test", layer.KindTap, contents)
 	if v := Check(f); len(v) != 0 {
 		t.Errorf("clean Tapfile produced violations: %+v", v)
 	}
@@ -116,7 +116,7 @@ func TestRule_SortOrder(t *testing.T) {
 		`brew "abc"     # alphabet`,
 		``,
 	}, "\n")
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "sort-order")
 	if len(got) != 1 {
 		t.Fatalf("got %d sort-order violations, want 1", len(got))
@@ -135,7 +135,7 @@ func TestRule_SortOrder_PerSection(t *testing.T) {
 		`brew "xyz"  # x`,
 		``,
 	}, "\n")
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "sort-order")
 	if len(got) != 0 {
 		t.Errorf("expected 0 sort-order violations across sections, got %d: %+v", len(got), got)
@@ -144,7 +144,7 @@ func TestRule_SortOrder_PerSection(t *testing.T) {
 
 func TestRule_TrailingDescription(t *testing.T) {
 	contents := `brew "git"` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "trailing-description")
 	if len(got) != 1 {
 		t.Errorf("got %d trailing-description violations, want 1", len(got))
@@ -153,7 +153,7 @@ func TestRule_TrailingDescription(t *testing.T) {
 
 func TestRule_TrailingDescription_TapfileSkipped(t *testing.T) {
 	contents := `charmbracelet/tap` + "\n"
-	f := writeFixture(t, "Tapfile.test", profile.KindTap, contents)
+	f := writeFixture(t, "Tapfile.test", layer.KindTap, contents)
 	got := findRule(Check(f), "trailing-description")
 	if len(got) != 0 {
 		t.Errorf("Tapfile should not produce trailing-description violations, got %+v", got)
@@ -162,7 +162,7 @@ func TestRule_TrailingDescription_TapfileSkipped(t *testing.T) {
 
 func TestRule_CommentSpace_NoSpace(t *testing.T) {
 	contents := `#packages` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "comment-space")
 	if len(got) != 1 {
 		t.Errorf("got %d comment-space violations, want 1", len(got))
@@ -171,7 +171,7 @@ func TestRule_CommentSpace_NoSpace(t *testing.T) {
 
 func TestRule_CommentSpace_TwoSpaces(t *testing.T) {
 	contents := `#  packages` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "comment-space")
 	if len(got) != 1 {
 		t.Errorf("got %d comment-space violations, want 1", len(got))
@@ -180,7 +180,7 @@ func TestRule_CommentSpace_TwoSpaces(t *testing.T) {
 
 func TestRule_CommentSpace_InlineEntry(t *testing.T) {
 	contents := `brew "git"  #vcs` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "comment-space")
 	if len(got) != 1 {
 		t.Errorf("got %d comment-space violations, want 1", len(got))
@@ -189,7 +189,7 @@ func TestRule_CommentSpace_InlineEntry(t *testing.T) {
 
 func TestRule_InlineCommentGap(t *testing.T) {
 	contents := `brew "git" # vcs` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "inline-comment-gap")
 	if len(got) != 1 {
 		t.Errorf("got %d inline-comment-gap violations, want 1", len(got))
@@ -204,7 +204,7 @@ func TestRule_NoConsecutiveBlanks(t *testing.T) {
 		`brew "def"  # d`,
 		``,
 	}, "\n")
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "no-consecutive-blanks")
 	if len(got) != 1 {
 		t.Errorf("got %d no-consecutive-blanks violations, want 1", len(got))
@@ -213,7 +213,7 @@ func TestRule_NoConsecutiveBlanks(t *testing.T) {
 
 func TestRule_NoTrailingWhitespace(t *testing.T) {
 	contents := `brew "git"  # vcs   ` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "no-trailing-whitespace")
 	if len(got) != 1 {
 		t.Errorf("got %d no-trailing-whitespace violations, want 1", len(got))
@@ -222,7 +222,7 @@ func TestRule_NoTrailingWhitespace(t *testing.T) {
 
 func TestRule_KnownEntryShape_Brewfile(t *testing.T) {
 	contents := `tap "user/repo"` + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	got := findRule(Check(f), "known-entry-shape")
 	if len(got) != 1 {
 		t.Errorf("got %d known-entry-shape violations, want 1", len(got))
@@ -231,7 +231,7 @@ func TestRule_KnownEntryShape_Brewfile(t *testing.T) {
 
 func TestRule_KnownEntryShape_Caskfile(t *testing.T) {
 	contents := `ghostty extra-token` + "\n"
-	f := writeFixture(t, "Caskfile.test", profile.KindCask, contents)
+	f := writeFixture(t, "Caskfile.test", layer.KindCask, contents)
 	got := findRule(Check(f), "known-entry-shape")
 	if len(got) != 1 {
 		t.Errorf("got %d known-entry-shape violations, want 1", len(got))
@@ -242,7 +242,7 @@ func TestCheck_StableOrder(t *testing.T) {
 	contents := strings.Join([]string{
 		`brew "git" #vcs`, // line 1: comment-space + inline-comment-gap
 	}, "\n") + "\n"
-	f := writeFixture(t, "Brewfile.test", profile.KindBrew, contents)
+	f := writeFixture(t, "Brewfile.test", layer.KindBrew, contents)
 	vs := Check(f)
 	if len(vs) < 2 {
 		t.Fatalf("expected at least 2 violations, got %d", len(vs))

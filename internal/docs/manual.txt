@@ -1,18 +1,21 @@
-brewkit - multi-profile Homebrew manager
-========================================
+brewkit - layered Homebrew manager
+==================================
 
-brewkit manages four file types per profile:
+brewkit manages four file types per layer:
 
-  Brewfile.<profile>   Homebrew Bundle format: brew "name"
-  Caskfile.<profile>   one cask name per line
-  Headfile.<profile>   one HEAD-tracked formula per line
-  Tapfile.<profile>    one tap per line: <tap> [<url>]
+  Brewfile.<layer>   Homebrew Bundle format: brew "name"
+  Caskfile.<layer>   one cask name per line
+  Headfile.<layer>   one HEAD-tracked formula per line
+  Tapfile.<layer>    one tap per line: <tap> [<url>]
 
-Multiple profiles may be active simultaneously. Their entries are
-applied in the order the profiles appear in the active list. The
-reserved profile "local" is automatically appended last when any
-*file.local exists in the configured directory; it is meant for
-machine-specific overrides and is gitignored by convention.
+Several layers may be selected at once. Their entries are applied in
+the layer order: the automatic "base" layer first, then the selected
+layers in order, then the automatic "local" layer. An unsuffixed
+Brewfile, Caskfile, Headfile, or Tapfile belongs to base, which applies
+whenever one of them exists. The *file.local files belong to local,
+which applies whenever one of them exists; it is meant for
+machine-specific overrides and is gitignored by convention. Neither
+automatic layer can be selected by name.
 
 
 Configuration
@@ -20,44 +23,54 @@ Configuration
 
 A brewkit.toml in the current working directory is loaded by default;
 pass --config <path> to use a different file. An implicit missing file
-is allowed; an explicit missing file is an error. Running with no config
-falls back to defaults:
+is allowed; an explicit missing or empty path is an error. Running with
+no config falls back to defaults:
 
-  dir          = "."
-  profiles     = []
-  env_profiles = ""
-  fail_fast    = true
+  dir        = "."
+  layers     = []
+  env_layers = []
+  fail_fast  = true
 
 Keys:
-  dir           Directory holding the *file.<profile> files. Relative
-                paths are resolved by the process current working
-                directory, not by the config file's directory.
-  profiles      Raw active profile list.
-  env_profiles  Name of an additional environment variable whose
-                comma-separated values append to `profiles`.
-  fail_fast     Stop on first error (true) or report at end (false).
+  dir         Directory holding the layer files. Relative paths are
+              resolved by the process current working directory, not
+              by the config file's directory.
+  layers      Raw layer list.
+  env_layers  Names of environment variables whose comma-separated
+              values append layers to `layers`, read in list order.
+              A blank or whitespace-padded name is an error.
+  fail_fast   Stop on first error (true) or report at end (false).
 
-BREWKIT_PROFILES overrides the raw `profiles` value:
+BREWKIT_LAYERS replaces the raw `layers` value:
 
-  BREWKIT_PROFILES=work,personal brewkit brew
+  BREWKIT_LAYERS=work,personal brewkit brew
 
-Profile flags override file/env raw profiles. Use --profiles for a
-comma-separated list, or repeat --profile to add one profile per flag:
+Layer flags replace file/env raw layers. Use --layers for a
+comma-separated list, or repeat --layer to add one layer per flag:
 
-  brewkit --profiles work,personal brew
-  brewkit --profile work --profile personal brew
+  brewkit --layers work,personal brew
+  brewkit --layer work --layer personal brew
 
-Effective profiles are derived from raw `profiles`, appended values
-from the variable named by `env_profiles`, de-duplication preserving
-first occurrence, validation, and finally automatic `local` append when
-any *file.local exists. The name "local" is reserved and cannot be
-listed explicitly. Apply commands require at least one effective
-profile.
+An explicitly empty list such as --layers "" or BREWKIT_LAYERS= clears
+the raw layers. Environment and flag items are trimmed, blank items are
+dropped, and a TOML item is used exactly as written.
 
-Print the loaded config, provenance, and effective runtime comments any
-time with:
+The effective layers are derived once: the raw `layers`, then the
+values of the variables named by `env_layers` appended in order, then
+de-duplication keeping the last occurrence of each name, then
+validation. A layer name is 1 to 64 characters of lowercase letters and
+digits in groups separated by single hyphens (work, work-laptop, 2026).
+The names "base" and "local" cannot be selected. The apply commands
+walk the layer order: base when an unsuffixed file exists, the
+effective layers, then local when a *file.local exists. An empty
+selection is fine; base and local still apply when available, and a
+layer with no file of a kind is skipped.
+
+Print the loaded config and the effective values any time with:
 
   brewkit config
+
+Add --provenance to append the source of every field.
 
 
 Commands
@@ -67,13 +80,13 @@ Commands
   brewkit brew [FORMULA]  Apply Brewfile entries.
   brewkit head [FORMULA]  Apply Headfile entries (SHA-idempotent).
   brewkit cask [CASK]     Apply Caskfile entries (greedy upgrades).
-  brewkit lint            Validate profile files.
-  brewkit config          Print loaded config, provenance, and effective values.
+  brewkit lint            Validate layer files.
+  brewkit config          Print loaded config and effective values.
   brewkit docs            Print this manual.
 
 Each apply command accepts an optional positional arg to scope the
 operation to a single item, looked up by name (full or short, after
-the last `/`) across the active profiles. `brewkit lint`,
+the last `/`) across the layers. `brewkit lint`,
 `brewkit config`, and `brewkit docs` take no positional arg. An
 unexpected arg, or a second arg on an apply command, is a usage error:
 brewkit exits 1 before reading any file or running any program.
@@ -84,8 +97,8 @@ Apply-command flags:
 
 Global flags:
   --config PATH          explicit path to brewkit.toml
-  --profiles LIST        comma-separated profiles; replaces file/env raw profiles
-  --profile NAME         add one profile; may be repeated; replaces file/env raw profiles
+  --layers LIST          comma-separated layers; replaces file/env raw layers
+  --layer NAME           add one layer; may be repeated; replaces file/env raw layers
   --dry-run              compute changes without applying
   --output-prefix TEXT   prefix brewkit command output lines
                          (excludes help/version)
@@ -104,7 +117,7 @@ one-line summary. Symbols:
   +  added (newly installed) or trusted (existing tap newly trusted)
   ↑  upgraded (with old → new where available)
   ✓  already up to date
-  ⊘  skipped notice (e.g. missing profile file)
+  ⊘  skipped notice (e.g. missing layer file)
   ✗  error
 
 Interactive color output automatically selects Catppuccin Latte for a
@@ -143,7 +156,7 @@ Every file supports `# comment` lines, blank lines, and inline
 trailing `# description` comments. Files are read regardless of
 sort order; alphabetical sorting is enforced by `brewkit lint`.
 
-Brewfile.<profile> - Homebrew Bundle subset.
+Brewfile.<layer> - Homebrew Bundle subset.
   brew "name"
   brew "name"            # description
   brew "user/tap/name"   # description for fully qualified entries
@@ -152,14 +165,14 @@ Brewfile.<profile> - Homebrew Bundle subset.
   Other Bundle directives (tap, cask, mas, vscode) are reported as
   unknown shape by `brewkit lint`. Use Tapfile/Caskfile instead.
 
-Caskfile.<profile>, Headfile.<profile>
+Caskfile.<layer>, Headfile.<layer>
   name
   name                       # description
 
   One token per line. Headfile may use fully qualified
   `user/tap/formula` names.
 
-Tapfile.<profile>
+Tapfile.<layer>
   tap-name
   tap-name <url>
   tap-name <url>             # description
@@ -204,10 +217,10 @@ Tapfile.<profile>
     brew upgrade --fetch-HEAD brewkit
 
 
-Editing profile files
----------------------
+Editing layer files
+-------------------
 
-Profile files are designed to be edited by humans AND by LLMs.
+Layer files are designed to be edited by humans AND by LLMs.
 Conventions enforced by `brewkit lint`:
 
   1. Each entry on its own line, alphabetically sorted within its

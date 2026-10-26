@@ -2,98 +2,130 @@ package cli
 
 import (
 	"context"
-	"errors"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/jmcampanini/brewkit/internal/config"
+	"github.com/spf13/pflag"
 )
 
-func TestRunConfig_PrintsToml(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
-
-	dir := fixtureRepo(t, map[string]string{})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
-
-	out := captureStdout(t, func() {
-		if err := testApp.runConfig(context.Background()); err != nil {
-			t.Errorf("runConfig err: %v", err)
-		}
-	})
-
-	for _, want := range []string{
-		`profiles = ["common"]`,
-		"# provenance:",
-		"# effective:",
-		`# effective_profiles = ["common"]`,
+func TestRunConfig_Report(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		files      map[string]string
+		provenance bool
+		quiet      bool
+		want       []string
+		wantAbsent []string
+	}{
+		{
+			name: "toml then effective block",
+			want: []string{
+				`layers = ["common"]`,
+				`env_layers = []`,
+				"# effective:",
+				`# effective_layers = ["common"]`,
+				`# layer_order = ["common"]`,
+			},
+			wantAbsent: []string{"# provenance:", "loaded_files"},
+		},
+		{
+			name:       "provenance appended on request",
+			provenance: true,
+			want: []string{
+				`# effective_layers = ["common"]`,
+				"# provenance:",
+				"# Path\tValue\tSource",
+				"# loaded_files = [",
+			},
+		},
+		{
+			name:  "quiet still prints the report",
+			quiet: true,
+			want:  []string{`layers = ["common"]`, "# effective:"},
+		},
+		{
+			name:  "automatic layers appear only in the layer order",
+			files: map[string]string{"Brewfile": "", "Brewfile.local": ""},
+			want: []string{
+				`layers = ["common"]`,
+				`# effective_layers = ["common"]`,
+				`# layer_order = ["base", "common", "local"]`,
+			},
+		},
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("config output missing %q:\n%s", want, out)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			defer resetFlags()
+			dir := fixtureRepo(t, tt.files)
+			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
+			testApp.flags.quiet = tt.quiet
+
+			out := captureStdout(t, func() {
+				if err := testApp.runConfig(context.Background(), tt.provenance); err != nil {
+					t.Errorf("runConfig err: %v", err)
+				}
+			})
+
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("config output missing %q:\n%s", want, out)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(out, absent) {
+					t.Errorf("config output should not contain %q:\n%s", absent, out)
+				}
+			}
+			if tt.provenance && strings.Index(out, "# effective:") > strings.Index(out, "# provenance:") {
+				t.Errorf("effective block should precede provenance:\n%s", out)
+			}
+		})
 	}
 }
 
-func TestRunConfig_QuietStillPrintsToml(t *testing.T) {
+// TestRunConfig_ReportReloads redirects the full report, provenance included,
+// into a file and loads it as brewkit.toml: the raw settings must come back
+// unchanged and the effective blocks must stay comments.
+func TestRunConfig_ReportReloads(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
-
-	dir := fixtureRepo(t, map[string]string{})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
-	testApp.flags.quiet = true
-
-	out := captureStdout(t, func() {
-		if err := testApp.runConfig(context.Background()); err != nil {
-			t.Errorf("runConfig err: %v", err)
-		}
-	})
-	if !strings.Contains(out, `profiles = ["common"]`) {
-		t.Errorf("quiet config should still print config payload:\n%s", out)
+	dir := fixtureRepo(t, map[string]string{"Brewfile": "", "Brewfile.local": ""})
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
+	t.Setenv("EXTRA_LAYERS", "work")
+	if err := os.WriteFile(filepath.Join(dir, "brewkit.toml"), []byte(`dir = "`+dir+`"`+"\n"+`layers = ["common"]`+"\n"+`env_layers = ["EXTRA_LAYERS"]`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestRunConfig_EffectiveDirAbsError(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
-
-	dir := fixtureRepo(t, map[string]string{})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
-
-	oldAbs := filepathAbs
-	filepathAbs = func(string) (string, error) { return "", errors.New("cwd unavailable") }
-	defer func() { filepathAbs = oldAbs }()
-
-	captureStdout(t, func() {
-		err := testApp.runConfig(context.Background())
-		if err == nil {
-			t.Fatal("expected effective dir resolution error")
-		}
-		if !strings.Contains(err.Error(), "resolve effective dir") || !strings.Contains(err.Error(), "cwd unavailable") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-}
-
-func TestRunConfig_FiltersAutoLocal(t *testing.T) {
-	resetFlags()
-	defer resetFlags()
-
-	dir := fixtureRepo(t, map[string]string{
-		"Brewfile.local": "",
-	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
 
 	out := captureStdout(t, func() {
-		if err := testApp.runConfig(context.Background()); err != nil {
+		if err := testApp.runConfig(context.Background(), true); err != nil {
 			t.Errorf("runConfig err: %v", err)
 		}
 	})
 
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, "profiles =") && strings.Contains(line, "local") {
-			t.Errorf("profiles= line should not include reserved 'local': %q", line)
-		}
+	reportPath := filepath.Join(dir, "report.toml")
+	if err := os.WriteFile(reportPath, []byte(out), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(out, "auto-appended") {
-		t.Errorf("output should include the auto-append note:\n%s", out)
+	flags := pflag.NewFlagSet("reload", pflag.ContinueOnError)
+	if err := config.RegisterFlags(flags); err != nil {
+		t.Fatal(err)
+	}
+	if err := flags.Parse([]string{"--config", reportPath}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := config.Load(flags)
+	if err != nil {
+		t.Fatalf("reload report as brewkit.toml: %v\n%s", err, out)
+	}
+	want := config.Config{Dir: dir, Layers: []string{"common"}, EnvLayers: []string{"EXTRA_LAYERS"}, FailFast: true}
+	if !reflect.DeepEqual(reloaded.Config, want) {
+		t.Errorf("reloaded config = %+v, want %+v\n%s", reloaded.Config, want, out)
+	}
+	if !reflect.DeepEqual(reloaded.LayerOrder, []string{"base", "common", "work", "local"}) {
+		t.Errorf("reloaded layer order = %v, want [base common work local]", reloaded.LayerOrder)
 	}
 }

@@ -1,6 +1,6 @@
 # brewkit
 
-brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-profile files. A profile is a name such as `work` or `personal`; its `Tapfile.<profile>`, `Brewfile.<profile>`, `Headfile.<profile>`, and `Caskfile.<profile>` list what that profile needs, several profiles can be active at once, and `brewkit lint` keeps the files sorted and commented consistently. brewkit never removes a tap, formula, or cask that is not listed.
+brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-layer files. A layer is a name such as `work` or `personal`; its `Tapfile.<layer>`, `Brewfile.<layer>`, `Headfile.<layer>`, and `Caskfile.<layer>` list what that layer needs, several layers can be selected at once, and `brewkit lint` keeps the files sorted and commented consistently. An unsuffixed `Brewfile` (likewise `Tapfile`, `Headfile`, `Caskfile`) is the automatic `base` layer and `*file.local` is the automatic `local` layer; both apply whenever their files exist. brewkit never removes a tap, formula, or cask that is not listed.
 
 
 ## Install
@@ -40,13 +40,13 @@ mise run build
 
 | Command | Result |
 |---|---|
-| `brewkit lint` | Check every profile file's sort order and comment style; exit 1 on violations. |
-| `brewkit tap` | Register and trust the taps listed for the active profiles. |
+| `brewkit lint` | Check every layer file's sort order and comment style; exit 1 on violations. |
+| `brewkit tap` | Register and trust the taps listed by the layers in order. |
 | `brewkit brew [--dry-run]` | Install or upgrade the listed formulas; `--dry-run` prints the plan instead. |
 | `brewkit head` | Install the listed HEAD formulas and rebuild those whose upstream commit moved. |
 | `brewkit cask` | Install or upgrade the listed casks, including ones that auto-update. |
 | `brewkit brew ripgrep` | Apply only the listed entry named `ripgrep`. |
-| `brewkit config` | Print the configuration in effect with the source of each value. |
+| `brewkit config` | Print the configuration in effect and the derived layer order; `--provenance` adds the source of each value. |
 
 `brewkit --help`, each command's `--help`, and the help topic `brewkit help exit-codes` are the canonical reference; `brewkit docs` prints the longer manual that supplements them.
 
@@ -61,9 +61,9 @@ A full run is `brewkit tap`, `brewkit brew`, `brewkit head`, and `brewkit cask` 
 
 ## Configuration
 
-brewkit reads `brewkit.toml` from the current directory when it exists and looks for profile files in the directory its `dir` key names, `.` by default, relative to the current directory. `brewkit config --help` documents profile selection, the precedence between flags, environment, and file, and every key.
+brewkit reads `brewkit.toml` from the current directory when it exists and looks for layer files in the directory its `dir` key names, `.` by default, relative to the current directory. `brewkit config --help` documents layer selection, the precedence between flags, environment, and file, and every key.
 
 ```toml
 # brewkit.toml
-profiles = ["common"]
+layers = ["common"]
 ```

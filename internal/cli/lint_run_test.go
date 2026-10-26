@@ -18,7 +18,7 @@ func TestRunLint_Clean(t *testing.T) {
 			``,
 		}, "\n"),
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	out := captureStdout(t, func() {
 		if err := testApp.runLint(context.Background()); err != nil {
@@ -30,7 +30,7 @@ func TestRunLint_Clean(t *testing.T) {
 	}
 }
 
-func TestRunLint_ProfileFlagNarrowsScan(t *testing.T) {
+func TestRunLint_LayerFlagNarrowsScan(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
 
@@ -48,7 +48,7 @@ func TestRunLint_ProfileFlagNarrowsScan(t *testing.T) {
 	})
 
 	root := newRootCmd(testApp)
-	root.SetArgs([]string{"--config", filepath.Join(dir, "brewkit.toml"), "--profile", "common", "lint"})
+	root.SetArgs([]string{"--config", filepath.Join(dir, "brewkit.toml"), "--layer", "common", "lint"})
 
 	out := captureStdout(t, func() {
 		if err := root.Execute(); err != nil {
@@ -56,7 +56,35 @@ func TestRunLint_ProfileFlagNarrowsScan(t *testing.T) {
 		}
 	})
 	if !strings.Contains(out, "no violations") {
-		t.Errorf("expected narrowed lint to ignore other profile violations:\n%s", out)
+		t.Errorf("expected narrowed lint to ignore other layer violations:\n%s", out)
+	}
+}
+
+func TestRunLint_DefaultScanCoversAutomaticLayers(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		file string
+	}{
+		{name: "base", file: "Brewfile"},
+		{name: "local", file: "Brewfile.local"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			defer resetFlags()
+			dir := fixtureRepo(t, map[string]string{
+				tt.file: `brew "z"  # z` + "\n" + `brew "a"  # a` + "\n",
+			})
+			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
+
+			out := captureStdout(t, func() {
+				if err := testApp.runLint(context.Background()); err == nil {
+					t.Error("expected lint to report the automatic layer's violation")
+				}
+			})
+			if !strings.Contains(out, filepath.Join(dir, tt.file)+":2: [sort-order]") {
+				t.Errorf("expected a violation in %s:\n%s", tt.file, out)
+			}
+		})
 	}
 }
 
@@ -71,7 +99,7 @@ func TestRunLint_OutputPrefix(t *testing.T) {
 			``,
 		}, "\n"),
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.outputPrefix = "  "
 
 	out := captureStdout(t, func() {
@@ -95,7 +123,7 @@ func TestRunLint_QuietCleanSilent(t *testing.T) {
 			``,
 		}, "\n"),
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.quiet = true
 
 	out := captureStdout(t, func() {
@@ -115,7 +143,7 @@ func TestRunLint_ReportsViolations(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "z"  # z` + "\n" + `brew "a"  # a` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
 	captureStdout(t, func() {
 		err := testApp.runLint(context.Background())
@@ -132,7 +160,7 @@ func TestRunLint_QuietReportsViolationsNoSummary(t *testing.T) {
 	dir := fixtureRepo(t, map[string]string{
 		"Brewfile.common": `brew "z"  # z` + "\n" + `brew "a"  # a` + "\n",
 	})
-	testApp.flags.configPath = filepath.Join(dir, "brewkit.toml")
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	testApp.flags.quiet = true
 
 	out := captureStdout(t, func() {
