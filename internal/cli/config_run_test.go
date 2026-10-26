@@ -48,12 +48,12 @@ func TestRunConfig_Report(t *testing.T) {
 			want:  []string{`layers = ["common"]`, "# effective:"},
 		},
 		{
-			name:  "automatic layers appear only in the layer order",
-			files: map[string]string{"Brewfile": "", "Brewfile.local": ""},
+			name:  "local appears only in the layer order",
+			files: map[string]string{"Brewfile.local": ""},
 			want: []string{
 				`layers = ["common"]`,
 				`# effective_layers = ["common"]`,
-				`# layer_order = ["base", "common", "local"]`,
+				`# layer_order = ["common", "local"]`,
 			},
 		},
 	} {
@@ -93,7 +93,7 @@ func TestRunConfig_Report(t *testing.T) {
 func TestRunConfig_ReportReloads(t *testing.T) {
 	resetFlags()
 	defer resetFlags()
-	dir := fixtureRepo(t, map[string]string{"Brewfile": "", "Brewfile.local": ""})
+	dir := fixtureRepo(t, map[string]string{"Brewfile.local": ""})
 	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 	t.Setenv("EXTRA_LAYERS", "work")
 	if err := os.WriteFile(filepath.Join(dir, "brewkit.toml"), []byte(`dir = "`+dir+`"`+"\n"+`layers = ["common"]`+"\n"+`env_layers = ["EXTRA_LAYERS"]`+"\n"), 0o644); err != nil {
@@ -125,7 +125,7 @@ func TestRunConfig_ReportReloads(t *testing.T) {
 	if !reflect.DeepEqual(reloaded.Config, want) {
 		t.Errorf("reloaded config = %+v, want %+v\n%s", reloaded.Config, want, out)
 	}
-	if !reflect.DeepEqual(reloaded.LayerOrder, []string{"base", "common", "work", "local"}) {
-		t.Errorf("reloaded layer order = %v, want [base common work local]", reloaded.LayerOrder)
+	if !reflect.DeepEqual(reloaded.LayerOrder, []string{"common", "work", "local"}) {
+		t.Errorf("reloaded layer order = %v, want [common work local]", reloaded.LayerOrder)
 	}
 }

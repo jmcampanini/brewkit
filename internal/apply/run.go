@@ -98,7 +98,7 @@ func Run(ctx context.Context, t layer.Kind, args []string, opts Options) error {
 	}
 
 	if filter != "" && !matched {
-		return fmt.Errorf("%q not found in any applied %s", filter, t.FilenamePrefix())
+		return fmt.Errorf("%q not found in any layer %s", filter, t)
 	}
 
 	if t == layer.KindCask {

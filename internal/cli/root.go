@@ -36,9 +36,8 @@ A layer is a name such as work or personal, and each layer has up to
 four files in the configured directory: Tapfile.<layer> (one tap per
 line with an optional URL), Brewfile.<layer> (brew "name" lines),
 Headfile.<layer> (one HEAD-tracked formula per line), and
-Caskfile.<layer> (one cask per line). An unsuffixed Tapfile, Brewfile,
-Headfile, or Caskfile belongs to the automatic base layer, and a
-*file.local belongs to the automatic local layer. Every file accepts
+Caskfile.<layer> (one cask per line). A *file.local belongs to the
+automatic local layer. Every file accepts
 '# comment' lines and trailing '  # description' comments. 'brewkit
 tap', 'brewkit brew', 'brewkit head', and 'brewkit cask' each apply one
 file kind for every layer in order, and a full run is those four

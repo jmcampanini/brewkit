@@ -11,13 +11,13 @@ func newLintCmd(app *commandContext) *cobra.Command {
 		Short: "Validate layer files (sort order + comment style)",
 		Long: `Check the layer files for style violations and print each one on
 stdout as '<path>:<line>: [<rule>] <message>'. With neither --layers nor
---layer, every Tapfile, Brewfile, Headfile, and Caskfile in dir is
-checked: the unsuffixed base files, every file whose suffix is a valid
-layer name (lowercase letters, digits, and single hyphens between
-groups), and the local files. With --layers or --layer only the
-effective layers' files are checked, so layers in brewkit.toml and
-BREWKIT_LAYERS, and the automatic base and local layers, never narrow
-the scan. Missing files are skipped and no brew command runs.
+--layer, every Tapfile, Brewfile, Headfile, and Caskfile in dir whose
+suffix is a valid layer name (lowercase letters, digits, and single
+hyphens between groups), including the local files, is checked. With
+--layers or --layer only the effective layers' files are checked: the
+flag values plus the env_layers additions, after deduplication, and
+never the local files. Missing files are skipped and no brew command
+runs.
 
 ` + docs.ConfigDiscoveryHelp + `
 

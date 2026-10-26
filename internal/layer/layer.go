@@ -13,17 +13,15 @@ import (
 	"strings"
 )
 
-// The automatic layers apply when their files exist and cannot be selected.
-const (
-	// BaseName is the layer an unsuffixed file (Brewfile, Caskfile,
-	// Headfile, Tapfile) belongs to.
-	BaseName = "base"
-	// LocalName is the layer the *file.local files belong to.
-	LocalName = "local"
-)
+// LocalName is the automatic layer the *file.local files belong to. It
+// applies whenever one of them exists and cannot be selected.
+const LocalName = "local"
 
-// MaxNameLength is the longest layer name brewkit accepts.
-const MaxNameLength = 64
+// baseName is the other automatic name of the layer scheme. brewkit has no
+// unsuffixed layer file, so the name is only rejected.
+const baseName = "base"
+
+const maxNameLength = 64
 
 var namePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -73,12 +71,7 @@ func (k Kind) FilenamePrefix() string {
 }
 
 // FilenameFor returns the file name for a kind/layer pair, e.g. "Tapfile.work".
-// The base layer's file carries no suffix: FilenameFor(KindTap, BaseName) is
-// "Tapfile".
 func FilenameFor(k Kind, name string) string {
-	if name == BaseName {
-		return k.FilenamePrefix()
-	}
 	return k.FilenamePrefix() + "." + name
 }
 
@@ -89,20 +82,20 @@ func PathFor(dir string, k Kind, name string) string {
 
 // ValidName reports whether name matches the layer name grammar: 1 to 64
 // ASCII characters of lowercase letters or digits in nonempty groups
-// separated by single hyphens. The automatic names base and local match
-// the grammar; callers that select layers reject them separately.
+// separated by single hyphens. The reserved names base and local match
+// the grammar; ValidateSelected rejects them.
 func ValidName(name string) bool {
-	return len(name) <= MaxNameLength && namePattern.MatchString(name)
+	return len(name) <= maxNameLength && namePattern.MatchString(name)
 }
 
 // ValidateSelected returns an error when name cannot be selected as a
-// layer: it fails the grammar or is one of the automatic layers.
+// layer: it fails the grammar or is one of the reserved names.
 func ValidateSelected(name string) error {
 	if !ValidName(name) {
 		return fmt.Errorf("invalid layer name %q: use 1 to 64 lowercase letters or digits, with single hyphens between groups, such as work or work-laptop", name)
 	}
-	if name == BaseName || name == LocalName {
-		return fmt.Errorf("layer %q is automatic and applies whenever its files exist; remove it from the layers", name)
+	if name == baseName || name == LocalName {
+		return fmt.Errorf("layer %q is reserved and cannot be selected; remove it from the layers", name)
 	}
 	return nil
 }
@@ -126,15 +119,12 @@ func HasFiles(dir, name string) (bool, error) {
 }
 
 // Discover returns every layer name that has a file in dir, sorted,
-// including base for an unsuffixed file and local when present. brewkit
-// lint uses this to scan every file regardless of which layers are
-// selected.
+// including local when present. brewkit lint uses this to scan every file
+// regardless of which layers are selected.
 //
-// A suffixed file declares a layer only when its suffix matches the layer
-// name grammar, which keeps editor swap files (Brewfile.foo.swp), backups
-// (Brewfile.foo.bak, Brewfile.foo~), and similar leftovers out. A file
-// suffixed with base is not a layer file: the base layer is the unsuffixed
-// file.
+// A file declares a layer only when its suffix matches the layer name
+// grammar, which keeps editor swap files (Brewfile.foo.swp), backups
+// (Brewfile.foo.bak, Brewfile.foo~), and similar leftovers out.
 func Discover(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -152,15 +142,10 @@ func Discover(dir string) ([]string, error) {
 			continue
 		}
 		prefix, suffix, suffixed := strings.Cut(entry.Name(), ".")
-		if _, known := prefixes[prefix]; !known {
+		if _, known := prefixes[prefix]; !known || !suffixed || !ValidName(suffix) {
 			continue
 		}
-		switch {
-		case !suffixed:
-			seen[BaseName] = struct{}{}
-		case suffix != BaseName && ValidName(suffix):
-			seen[suffix] = struct{}{}
-		}
+		seen[suffix] = struct{}{}
 	}
 
 	names := make([]string, 0, len(seen))

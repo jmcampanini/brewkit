@@ -34,16 +34,16 @@ failures at the end when false).
 
 The TOML section reloads as brewkit.toml. The '# effective:' block gives
 effective_dir (dir made absolute), effective_layers (the selected layers
-after env_layers additions and deduplication, without base and local),
-and layer_order (the list the apply commands walk: base when an
-unsuffixed file exists, the effective layers, then local when a
-*file.local exists). With --provenance the '# provenance:' block lists
-each field as a commented, tab-separated path, value, and source, where
-source is <default>, the path of brewkit.toml, <env>, or <pflag>, and
-'# loaded_files = [...]' names the files read. Every line after the TOML
-is a comment, so the whole report reloads as brewkit.toml. Nothing is
-redacted; the configuration holds no secret fields. --quiet does not
-suppress the report and --dry-run has no effect.`,
+after env_layers additions and deduplication, never base or local), and
+layer_order (the list the apply commands walk: the effective layers,
+then local when a *file.local exists). With --provenance the
+'# provenance:' block lists each field as a commented, tab-separated
+path, value, and source, where source is <default>, the path of
+brewkit.toml, <env>, or <pflag>, and '# loaded_files = [...]' names the
+files read. Every line after the TOML is a comment, so the whole report
+reloads as brewkit.toml. Nothing is redacted; the configuration holds
+no secret fields. --quiet does not suppress the report and --dry-run
+has no effect.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return app.runConfig(cmd.Context(), provenance)

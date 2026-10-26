@@ -60,31 +60,22 @@ func TestRunLint_LayerFlagNarrowsScan(t *testing.T) {
 	}
 }
 
-func TestRunLint_DefaultScanCoversAutomaticLayers(t *testing.T) {
-	for _, tt := range []struct {
-		name string
-		file string
-	}{
-		{name: "base", file: "Brewfile"},
-		{name: "local", file: "Brewfile.local"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			resetFlags()
-			defer resetFlags()
-			dir := fixtureRepo(t, map[string]string{
-				tt.file: `brew "z"  # z` + "\n" + `brew "a"  # a` + "\n",
-			})
-			useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
+func TestRunLint_DefaultScanCoversLocal(t *testing.T) {
+	resetFlags()
+	defer resetFlags()
+	dir := fixtureRepo(t, map[string]string{
+		"Brewfile.local": `brew "z"  # z` + "\n" + `brew "a"  # a` + "\n",
+	})
+	useConfigFile(t, filepath.Join(dir, "brewkit.toml"))
 
-			out := captureStdout(t, func() {
-				if err := testApp.runLint(context.Background()); err == nil {
-					t.Error("expected lint to report the automatic layer's violation")
-				}
-			})
-			if !strings.Contains(out, filepath.Join(dir, tt.file)+":2: [sort-order]") {
-				t.Errorf("expected a violation in %s:\n%s", tt.file, out)
-			}
-		})
+	out := captureStdout(t, func() {
+		if err := testApp.runLint(context.Background()); err == nil {
+			t.Error("expected lint to report the local layer's violation")
+		}
+	})
+
+	if !strings.Contains(out, filepath.Join(dir, "Brewfile.local")+":2: [sort-order]") {
+		t.Errorf("expected a violation in Brewfile.local:\n%s", out)
 	}
 }
 

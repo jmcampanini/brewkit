@@ -110,7 +110,7 @@ func TestExecuteReturnsStatusAndPrintsErrors(t *testing.T) {
 	}{
 		{name: "success", args: []string{"docs"}, output: docs.Manual()},
 		{name: "failure", args: []string{"--output-prefix", "prefix: ", "--layer", "local", "brew"}, status: 1,
-			errorOutput: "prefix: brewkit: layer \"local\" is automatic and applies whenever its files exist; remove it from the layers\n"},
+			errorOutput: "prefix: brewkit: layer \"local\" is reserved and cannot be selected; remove it from the layers\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("BREWKIT_LAYERS", "")

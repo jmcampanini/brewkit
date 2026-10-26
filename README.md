@@ -1,6 +1,6 @@
 # brewkit
 
-brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-layer files. A layer is a name such as `work` or `personal`; its `Tapfile.<layer>`, `Brewfile.<layer>`, `Headfile.<layer>`, and `Caskfile.<layer>` list what that layer needs, several layers can be selected at once, and `brewkit lint` keeps the files sorted and commented consistently. An unsuffixed `Brewfile` (likewise `Tapfile`, `Headfile`, `Caskfile`) is the automatic `base` layer and `*file.local` is the automatic `local` layer; both apply whenever their files exist. brewkit never removes a tap, formula, or cask that is not listed.
+brewkit applies Homebrew taps, formulas, HEAD formulas, and casks from per-layer files. A layer is a name such as `work` or `personal`; its `Tapfile.<layer>`, `Brewfile.<layer>`, `Headfile.<layer>`, and `Caskfile.<layer>` list what that layer needs, several layers can be selected at once, and `brewkit lint` keeps the files sorted and commented consistently. The `*file.local` files are the automatic `local` layer, which applies whenever one of them exists. brewkit never removes a tap, formula, or cask that is not listed.
 
 
 ## Install

@@ -27,11 +27,10 @@ work,laptop,work selects laptop then work. A layer name is 1 to 64
 characters of lowercase letters and digits in groups separated by
 single hyphens, such as work or work-laptop; any other name, including
 a blank item, is an error. The names base and local
-cannot be selected: base is the unsuffixed Tapfile, Brewfile, Headfile,
-or Caskfile and local is the *file.local files, and each applies
-whenever one of its files exists in dir. The apply commands walk base,
+are reserved and cannot be selected; local is the *file.local files,
+which apply whenever one of them exists in dir. The apply commands walk
 the selected layers in order, then local; a selection with no layers
-still applies base and local. 'brewkit config' prints the resulting
+still applies local. 'brewkit config' prints the resulting
 effective_layers and layer_order.`
 
 // BrewStateHelp describes the Homebrew state queries; the brew and cask

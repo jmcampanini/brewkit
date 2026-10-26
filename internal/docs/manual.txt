@@ -9,13 +9,11 @@ brewkit manages four file types per layer:
   Tapfile.<layer>    one tap per line: <tap> [<url>]
 
 Several layers may be selected at once. Their entries are applied in
-the layer order: the automatic "base" layer first, then the selected
-layers in order, then the automatic "local" layer. An unsuffixed
-Brewfile, Caskfile, Headfile, or Tapfile belongs to base, which applies
-whenever one of them exists. The *file.local files belong to local,
-which applies whenever one of them exists; it is meant for
-machine-specific overrides and is gitignored by convention. Neither
-automatic layer can be selected by name.
+the layer order: the selected layers in order, then the automatic
+"local" layer. The *file.local files belong to local, which applies
+whenever one of them exists; it is meant for machine-specific overrides
+and is gitignored by convention. The names "base" and "local" are
+reserved and cannot be selected.
 
 
 Configuration
@@ -60,11 +58,10 @@ values of the variables named by `env_layers` appended in order, then
 de-duplication keeping the last occurrence of each name, then
 validation. A layer name is 1 to 64 characters of lowercase letters and
 digits in groups separated by single hyphens (work, work-laptop, 2026).
-The names "base" and "local" cannot be selected. The apply commands
-walk the layer order: base when an unsuffixed file exists, the
-effective layers, then local when a *file.local exists. An empty
-selection is fine; base and local still apply when available, and a
-layer with no file of a kind is skipped.
+The names "base" and "local" are reserved and cannot be selected. The
+apply commands walk the layer order: the effective layers, then local
+when a *file.local exists. An empty selection is fine; local still
+applies when available, and a layer with no file of a kind is skipped.
 
 Print the loaded config and the effective values any time with:
 

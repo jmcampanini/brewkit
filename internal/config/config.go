@@ -32,7 +32,7 @@ type Config struct {
 
 	// Layers is the raw layer list. BREWKIT_LAYERS, --layers, and repeated
 	// --layer flags each replace it.
-	Layers []string `toml:"layers" config:"layers" pflag_singular:"layer" help:"layers to select, comma-separated; replaces brewkit.toml and BREWKIT_LAYERS"`
+	Layers []string `toml:"layers" config:"layers" pflag_singular:"layer" help:"layers to select; replaces brewkit.toml and BREWKIT_LAYERS"`
 
 	// EnvLayers names environment variables whose comma-separated values
 	// append layers to Layers. It is set from the file only.
@@ -59,9 +59,8 @@ type Effective struct {
 	// base or local.
 	Layers []string
 
-	// LayerOrder is the list the apply commands walk: base when an
-	// unsuffixed file exists, then Layers, then local when a *file.local
-	// exists.
+	// LayerOrder is the list the apply commands walk: Layers, then local
+	// when a *file.local exists.
 	LayerOrder []string
 
 	// Report records which source set each field.
@@ -107,6 +106,11 @@ func Load(flags *pflag.FlagSet) (Effective, error) {
 		return Effective{}, fmt.Errorf("resolve effective dir %q: %w", cfg.Dir, err)
 	}
 
+	// The loader delivers --layers "" and a whitespace-only BREWKIT_LAYERS
+	// as [""]; that shape is the cleared list, not a blank name.
+	if len(cfg.Layers) == 1 && cfg.Layers[0] == "" {
+		cfg.Layers = []string{}
+	}
 	layers, err := effectiveLayers(cfg)
 	if err != nil {
 		return Effective{}, err
@@ -172,13 +176,8 @@ func newFileLoader(flags *pflag.FlagSet) (configloader.ConfigLoader[Config], err
 
 // effectiveLayers combines the raw layers with the env_layers additions,
 // keeps the last occurrence of each name, and validates every survivor.
-// The loader delivers --layers "" and a whitespace-only BREWKIT_LAYERS as
-// [""], so that one shape is the cleared list rather than a blank name.
 func effectiveLayers(cfg Config) ([]string, error) {
 	combined := append([]string(nil), cfg.Layers...)
-	if len(combined) == 1 && combined[0] == "" {
-		combined = nil
-	}
 	for _, variable := range cfg.EnvLayers {
 		if variable == "" || strings.TrimSpace(variable) != variable {
 			return nil, fmt.Errorf("env_layers entry %q must be a variable name without surrounding whitespace", variable)
@@ -200,19 +199,12 @@ func effectiveLayers(cfg Config) ([]string, error) {
 }
 
 func layerOrder(dir string, layers []string) ([]string, error) {
-	hasBase, err := layer.HasFiles(dir, layer.BaseName)
-	if err != nil {
-		return nil, err
-	}
 	hasLocal, err := layer.HasFiles(dir, layer.LocalName)
 	if err != nil {
 		return nil, err
 	}
 
-	order := make([]string, 0, len(layers)+2)
-	if hasBase {
-		order = append(order, layer.BaseName)
-	}
+	order := make([]string, 0, len(layers)+1)
 	order = append(order, layers...)
 	if hasLocal {
 		order = append(order, layer.LocalName)

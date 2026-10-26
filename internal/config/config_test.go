@@ -106,7 +106,7 @@ func TestLoad_ConfigFileErrors(t *testing.T) {
 			setup: func(t *testing.T) *pflag.FlagSet {
 				return newTestFlagSet(t, "--config", writeConfig(t, "verbose = true\n"))
 			},
-			wantErr: "verbose",
+			wantErr: "unknown keys: verbose",
 		},
 		{
 			name: "empty dir",
@@ -259,9 +259,9 @@ func TestLoad_EffectiveLayers(t *testing.T) {
 		{name: "padded TOML item is not trimmed", contents: `layers = [" work "]`, wantErr: `invalid layer name " work "`},
 		{name: "blank flag item rejected", args: []string{"--layers", "work,,laptop"}, wantErr: `invalid layer name ""`},
 		{name: "whitespace env value is empty", env: map[string]string{"BREWKIT_LAYERS": " "}, want: []string{}},
-		{name: "local rejected", contents: `layers = ["local"]`, wantErr: `layer "local" is automatic`},
-		{name: "base rejected", contents: `layers = ["base"]`, wantErr: `layer "base" is automatic`},
-		{name: "local rejected from env_layers", contents: `env_layers = ["A"]`, env: map[string]string{"A": "local"}, wantErr: `layer "local" is automatic`},
+		{name: "local rejected", contents: `layers = ["local"]`, wantErr: `layer "local" is reserved`},
+		{name: "base rejected", contents: `layers = ["base"]`, wantErr: `layer "base" is reserved`},
+		{name: "local rejected from env_layers", contents: `env_layers = ["A"]`, env: map[string]string{"A": "local"}, wantErr: `layer "local" is reserved`},
 		{name: "uppercase rejected", contents: `layers = ["Work"]`, wantErr: `invalid layer name "Work"`},
 		{name: "underscore rejected from flag", args: []string{"--layer", "work_laptop"}, wantErr: `invalid layer name "work_laptop"`},
 		{name: "blank env_layers name rejected", contents: `env_layers = [""]`, wantErr: `env_layers entry ""`},
@@ -298,12 +298,10 @@ func TestLoad_LayerOrder(t *testing.T) {
 		layers    string
 		wantOrder []string
 	}{
-		{name: "no automatic layers", layers: `["work"]`, wantOrder: []string{"work"}},
-		{name: "base from unsuffixed file", files: []string{"Tapfile"}, layers: `["work"]`, wantOrder: []string{"base", "work"}},
-		{name: "local from suffixed file", files: []string{"Brewfile.local"}, layers: `["work"]`, wantOrder: []string{"work", "local"}},
-		{name: "both around the layers", files: []string{"Caskfile", "Headfile.local"}, layers: `["work", "laptop"]`, wantOrder: []string{"base", "work", "laptop", "local"}},
-		{name: "empty selection keeps automatic layers", files: []string{"Brewfile", "Brewfile.local"}, layers: `[]`, wantOrder: []string{"base", "local"}},
-		{name: "suffixed base file is not base", files: []string{"Brewfile.base"}, layers: `[]`, wantOrder: []string{}},
+		{name: "no local files", layers: `["work"]`, wantOrder: []string{"work"}},
+		{name: "local after the layers", files: []string{"Brewfile.local"}, layers: `["work", "laptop"]`, wantOrder: []string{"work", "laptop", "local"}},
+		{name: "empty selection keeps local", files: []string{"Brewfile.local"}, layers: `[]`, wantOrder: []string{"local"}},
+		{name: "unsuffixed and base files are not applied", files: []string{"Brewfile", "Brewfile.base"}, layers: `[]`, wantOrder: []string{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -322,6 +320,19 @@ func TestLoad_LayerOrder(t *testing.T) {
 				t.Errorf("LayerOrder = %v, want %v", got.LayerOrder, tt.wantOrder)
 			}
 		})
+	}
+}
+
+func TestLoad_ClearedListReportsEmpty(t *testing.T) {
+	t.Setenv("BREWKIT_LAYERS", " ")
+
+	got, err := Load(newTestFlagSet(t))
+	if err != nil {
+		t.Fatalf("Load() returned err: %v", err)
+	}
+
+	if !reflect.DeepEqual(got.Config.Layers, []string{}) {
+		t.Errorf("Config.Layers = %#v, want []string{}", got.Config.Layers)
 	}
 }
 

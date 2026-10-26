@@ -483,8 +483,8 @@ func TestRunApply_MissingFileNotice(t *testing.T) {
 		want  string
 	}{
 		{name: "selected layer", want: "⊘ common: no Brewfile, skipping\nSummary: 1 skipped\n"},
-		{name: "automatic layers with another kind", files: map[string]string{"Tapfile": "", "Tapfile.local": ""},
-			want: "⊘ base: no Brewfile, skipping\n⊘ common: no Brewfile, skipping\n⊘ local: no Brewfile, skipping\nSummary: 3 skipped\n"},
+		{name: "local with another kind", files: map[string]string{"Tapfile.local": ""},
+			want: "⊘ common: no Brewfile, skipping\n⊘ local: no Brewfile, skipping\nSummary: 2 skipped\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resetFlags()
@@ -537,17 +537,16 @@ func TestRunApply_LayerOrder(t *testing.T) {
 		want   string
 	}{
 		{name: "nothing available", layers: `[]`, want: "Summary: nothing to do\n"},
-		{name: "empty selection applies base then local", layers: `[]`, files: map[string]string{
-			"Brewfile":        `brew "git"  # vcs` + "\n",
+		{name: "empty selection applies local only", layers: `[]`, files: map[string]string{
+			"Brewfile":        `brew "git"  # unsuffixed, never read` + "\n",
 			"Brewfile.local":  `brew "jq"  # json` + "\n",
 			"Brewfile.common": `brew "ripgrep"  # not selected` + "\n",
-		}, want: "+ git (dry-run)\n+ jq (dry-run)\nSummary: 2 added\n"},
-		{name: "selected layers sit between base and local", layers: `["work", "laptop", "work"]`, files: map[string]string{
-			"Brewfile":        `brew "base-entry"    # base` + "\n",
+		}, want: "+ jq (dry-run)\nSummary: 1 added\n"},
+		{name: "selected layers precede local", layers: `["work", "laptop", "work"]`, files: map[string]string{
 			"Brewfile.laptop": `brew "laptop-entry"  # laptop` + "\n",
 			"Brewfile.work":   `brew "work-entry"    # work` + "\n",
 			"Brewfile.local":  `brew "local-entry"   # local` + "\n",
-		}, want: "+ base-entry (dry-run)\n+ laptop-entry (dry-run)\n+ work-entry (dry-run)\n+ local-entry (dry-run)\nSummary: 4 added\n"},
+		}, want: "+ laptop-entry (dry-run)\n+ work-entry (dry-run)\n+ local-entry (dry-run)\nSummary: 3 added\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resetFlags()

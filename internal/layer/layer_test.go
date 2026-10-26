@@ -17,11 +17,11 @@ func TestValidName(t *testing.T) {
 		{name: "work-laptop", want: true},
 		{name: "2026", want: true},
 		{name: "a", want: true},
-		{name: strings.Repeat("a", MaxNameLength), want: true},
+		{name: strings.Repeat("a", maxNameLength), want: true},
 		{name: "base", want: true},
 		{name: "local", want: true},
 		{name: ""},
-		{name: strings.Repeat("a", MaxNameLength+1)},
+		{name: strings.Repeat("a", maxNameLength+1)},
 		{name: "Work"},
 		{name: "work_laptop"},
 		{name: "-work"},
@@ -46,8 +46,8 @@ func TestValidateSelected(t *testing.T) {
 		{name: "work"},
 		{name: "Work", wantErr: `invalid layer name "Work"`},
 		{name: "", wantErr: `invalid layer name ""`},
-		{name: "base", wantErr: `layer "base" is automatic`},
-		{name: "local", wantErr: `layer "local" is automatic`},
+		{name: "base", wantErr: `layer "base" is reserved`},
+		{name: "local", wantErr: `layer "local" is reserved`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateSelected(tt.name)
@@ -66,7 +66,6 @@ func TestValidateSelected(t *testing.T) {
 
 func TestHasFiles(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "Caskfile"), "")
 	mustWrite(t, filepath.Join(dir, "Headfile.local"), "")
 	if err := os.Mkdir(filepath.Join(dir, "Brewfile.work"), 0o755); err != nil {
 		t.Fatal(err)
@@ -76,7 +75,6 @@ func TestHasFiles(t *testing.T) {
 		name string
 		want bool
 	}{
-		{name: BaseName, want: true},
 		{name: LocalName, want: true},
 		{name: "work", want: true},
 		{name: "absent"},
@@ -100,7 +98,6 @@ func TestDiscover(t *testing.T) {
 		"Headfile.work-laptop",
 		"Tapfile.work",
 		"Brewfile.local",
-		"Brewfile.base",
 		"Brewfile.Work",
 		"Brewfile.work_laptop",
 		"Brewfile.common.bak",
@@ -121,7 +118,7 @@ func TestDiscover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover err: %v", err)
 	}
-	want := []string{"base", "common", "local", "work", "work-laptop"}
+	want := []string{"common", "local", "work", "work-laptop"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Discover() = %v, want %v", got, want)
 	}
@@ -138,8 +135,6 @@ func TestFilenameFor(t *testing.T) {
 		{KindHead, "work", "Headfile.work"},
 		{KindTap, "work", "Tapfile.work"},
 		{KindBrew, LocalName, "Brewfile.local"},
-		{KindBrew, BaseName, "Brewfile"},
-		{KindTap, BaseName, "Tapfile"},
 	} {
 		if got := FilenameFor(tt.k, tt.layer); got != tt.want {
 			t.Errorf("FilenameFor(%s, %s) = %q, want %q", tt.k, tt.layer, got, tt.want)
