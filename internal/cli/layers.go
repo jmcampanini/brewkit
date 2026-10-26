@@ -20,8 +20,7 @@ listed by more than one layer is applied where it first appears; a
 later layer that lists it sees it as already satisfied. The selected
 layers come from brewkit.toml, the environment, and flags; 'brewkit
 config --help' describes those inputs, the layer name grammar, and how
-duplicates are resolved, and 'brewkit config' prints the resulting
-order.
+duplicates are resolved.
 
 The local layer is the *file.local files (Tapfile.local, Brewfile.local,
 Headfile.local, and Caskfile.local). It applies last whenever one of

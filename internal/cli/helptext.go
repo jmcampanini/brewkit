@@ -14,6 +14,11 @@ instead and fails when PATH is empty or does not exist. Layer files are
 looked up in the directory named by dir (default '.'), resolved against
 the current working directory rather than the location of brewkit.toml.`
 
+// noTerminalHelp states the contract of a command that works the same with
+// or without a terminal; the config and lint commands include it.
+const noTerminalHelp = `This command never prompts and needs no terminal; it behaves the same in
+a pipe. A failure ends with one 'brewkit: <message>' line on stderr.`
+
 // layerFileLocationHelp names the files an apply command reads and where
 // it finds them. prefix is the file name prefix of the kind, such as
 // Brewfile.

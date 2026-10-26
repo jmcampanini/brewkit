@@ -44,7 +44,9 @@ brewkit.toml, <env>, or <pflag>, and '# loaded_files = [...]' names the
 files read. Every line after the TOML is a comment, so the whole report
 reloads as brewkit.toml. Nothing is redacted; the configuration holds
 no secret fields. --quiet does not suppress the report and --dry-run
-has no effect.`,
+has no effect.
+
+` + noTerminalHelp,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return app.runConfig(cmd.Context(), provenance)

@@ -105,11 +105,12 @@ func terminalColorsEnabled(profile colorprofile.Profile) bool {
 	return profile > colorprofile.ASCII
 }
 
-// terminalCursorControl reports whether a terminal described by env accepts
-// the cursor movement and line erase the spinner uses. It is independent
-// of the color profile: an uncolored terminal still carries the spinner,
-// and TERM=dumb or an unset TERM carries neither.
-func terminalCursorControl(env []string) bool {
+// terminalActsOnEscapes reports whether TERM describes a terminal that acts
+// on escape sequences: the cursor movement and line erase the spinner uses
+// and the background color query. It is independent of the color profile:
+// an uncolored terminal still carries the spinner, and TERM=dumb or an
+// unset TERM carries neither.
+func terminalActsOnEscapes(env []string) bool {
 	value := envValue(env, "TERM")
 	return value != "" && value != "dumb"
 }

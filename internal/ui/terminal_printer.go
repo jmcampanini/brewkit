@@ -26,22 +26,22 @@ func NewTerminalPrinter(opts TerminalOptions) *Printer {
 	stderrColorTerminal := stderrTTY && terminalColorsEnabled(stderrProfile)
 
 	// The background is queried at most once, on one stream, and only when
-	// that stream is a terminal whose resolved profile renders color; both
-	// streams then share the theme. Otherwise the dark palette is the
-	// deterministic fallback.
+	// that stream is a terminal whose resolved profile renders color and
+	// whose TERM says it answers escape sequences; both streams then share
+	// the theme. Otherwise the dark palette is the deterministic fallback.
 	themeOutput := os.Stdout
 	themeProfile := stdoutProfile
 	if !stdoutColorTerminal && stderrColorTerminal {
 		themeOutput = os.Stderr
 		themeProfile = stderrProfile
 	}
-	allowThemeQuery := level != LevelQuiet
+	allowThemeQuery := level != LevelQuiet && terminalActsOnEscapes(env)
 	theme := ThemeForBackground(terminalHasDarkBackground(themeOutput, themeProfile, allowThemeQuery))
 
 	// The spinner is transient progress drawn with cursor control on
 	// stderr, so it needs both streams to be terminals and stderr to
 	// accept cursor control; the color decision does not affect it.
-	spinner := level == LevelNormal && stdoutTTY && stderrTTY && terminalCursorControl(env)
+	spinner := level == LevelNormal && stdoutTTY && stderrTTY && terminalActsOnEscapes(env)
 	spinnerWidth := 0
 	if spinner {
 		spinnerWidth = terminalWidth(os.Stderr)

@@ -57,24 +57,27 @@ that changes the system. --verbose (-v) adds brew's output under each
 changed entry and the offending line under each lint violation; --quiet
 (-q) limits the apply commands and lint to errors; the two cannot be
 combined. --output-prefix TEXT prefixes every line brewkit writes,
-including errors and progress, except help and version output.
+including errors and progress, except help and version output and an
+invocation rejected before the flag is parsed.
 --color MODE decides whether the output brewkit itself renders is
 colored: auto (the default) colors a stream only when it is a terminal,
 TERM is not dumb, and NO_COLOR is empty; always colors every stream
 even when it is not a terminal or NO_COLOR is set; never disables
-color. brew's captured output passes through unchanged, and the config
-report and lint findings never carry color. --config, --layers, and
---layer are described under 'brewkit config --help'.
+color. The mode governs only the styling brewkit adds; brew's captured
+text is never altered, and the config report and lint findings never
+carry color. --config, --layers, and --layer are described under
+'brewkit config --help'.
 
 Command payloads go to stdout: per-entry results and the summary from the
 apply commands, lint findings, and the config report. Errors and
 transient progress go to stderr, and a failure ends with 'brewkit:
 <message>' on stderr. Color is decided per stream, and the light or
 dark palette follows COLORFGBG when set, otherwise one terminal
-background query when a colored stream and stdin are terminals and
---quiet is not set, otherwise the dark palette. The progress line
-needs stdout and stderr to be terminals and a TERM other than dumb;
-without them the apply commands print only their durable lines.
+background query when a colored stream and stdin are terminals, TERM
+is set and not dumb, and --quiet is not set, otherwise the dark
+palette. The progress line needs stdout and stderr to be terminals and
+a TERM that is set and not dumb; without them the apply commands print
+only their durable lines.
 brewkit never prompts. It runs Homebrew's brew from PATH with stdin
 disconnected and output captured until each command ends, so brew
 cannot read an answer from brewkit's stdin and any prompt text appears
@@ -160,22 +163,18 @@ func Execute() int {
 	return exitSuccess
 }
 
-// markCommandStart wraps every runner in the tree so started records that
-// cobra accepted the invocation. Cobra validates the flag groups after the
-// pre-run hooks, so entering a runner is the only point that proves command
-// lookup, flag parsing, the positional grammar, and the flag groups all
-// passed; an error before it is a usage error.
+// markCommandStart wraps every application-owned runner in the tree so
+// started records that cobra accepted the invocation. Cobra validates the
+// flag groups after the pre-run hooks, so entering a runner is the only
+// point that proves command lookup, flag parsing, the positional grammar,
+// and the flag groups all passed; an error before it is a usage error.
+// Cobra adds its own help and completion commands later, inside Execute;
+// they report no failure of their own.
 func markCommandStart(cmd *cobra.Command, started *bool) {
 	if run := cmd.RunE; run != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			*started = true
 			return run(cmd, args)
-		}
-	}
-	if run := cmd.Run; run != nil {
-		cmd.Run = func(cmd *cobra.Command, args []string) {
-			*started = true
-			run(cmd, args)
 		}
 	}
 	for _, child := range cmd.Commands() {

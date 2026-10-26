@@ -82,7 +82,7 @@ func TestColorModeSet(t *testing.T) {
 	}
 }
 
-func TestTerminalCursorControl(t *testing.T) {
+func TestTerminalActsOnEscapes(t *testing.T) {
 	tests := []struct {
 		name string
 		env  []string
@@ -96,8 +96,8 @@ func TestTerminalCursorControl(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := terminalCursorControl(tt.env); got != tt.want {
-				t.Errorf("terminalCursorControl(%q) = %v, want %v", tt.env, got, tt.want)
+			if got := terminalActsOnEscapes(tt.env); got != tt.want {
+				t.Errorf("terminalActsOnEscapes(%q) = %v, want %v", tt.env, got, tt.want)
 			}
 		})
 	}

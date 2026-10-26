@@ -41,7 +41,7 @@ known-entry-shape violation.
 
 The files are meant to be edited by people and by language models.
 Within a section, a run of entries delimited by blank lines, keep the
-entries sorted by name; comment-only lines belong to the surrounding
+entries sorted by name in byte order; comment-only lines belong to the
 section and do not delimit it. Give every Brewfile, Caskfile, and
 Headfile entry a trailing description, leave at least two spaces
 before its '#', follow every '#' with exactly one space, and avoid
