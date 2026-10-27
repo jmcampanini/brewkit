@@ -127,29 +127,30 @@ func TestPrinter_QuietStillShowsErrors(t *testing.T) {
 }
 
 func TestPrinter_VerboseAddsRawOutput(t *testing.T) {
-	p, out, _ := newTestPrinter(LevelVerbose)
+	p, out, errOut := newTestPrinter(LevelVerbose)
 	p.Item(SymAdded, "ripgrep", "")
 	p.Verbose("==> Downloading...\n==> Pouring ripgrep.bottle...")
 	p.Footer()
 
-	got := out.String()
-	want := "+ ripgrep\n" +
-		"    ==> Downloading...\n" +
-		"    ==> Pouring ripgrep.bottle...\n" +
-		"Summary: 1 added\n"
-	if got != want {
-		t.Errorf("unexpected verbose output:\nwant: %q\ngot:  %q", want, got)
+	wantOut := "+ ripgrep\nSummary: 1 added\n"
+	if got := out.String(); got != wantOut {
+		t.Errorf("stdout = %q, want %q", got, wantOut)
+	}
+	wantErr := "    ==> Downloading...\n" +
+		"    ==> Pouring ripgrep.bottle...\n"
+	if got := errOut.String(); got != wantErr {
+		t.Errorf("stderr = %q, want %q", got, wantErr)
 	}
 }
 
 func TestPrinter_NormalSkipsRawOutput(t *testing.T) {
-	p, out, _ := newTestPrinter(LevelNormal)
+	p, out, errOut := newTestPrinter(LevelNormal)
 	p.Item(SymAdded, "ripgrep", "")
 	p.Verbose("==> Downloading...")
 	p.Footer()
 
-	if strings.Contains(out.String(), "Downloading") {
-		t.Errorf("normal level should not print verbose output:\n%s", out.String())
+	if strings.Contains(out.String()+errOut.String(), "Downloading") {
+		t.Errorf("normal level should not print verbose output:\nstdout: %q\nstderr: %q", out.String(), errOut.String())
 	}
 }
 
@@ -410,24 +411,12 @@ func TestPrinter_RestartAppsNotice(t *testing.T) {
 	}
 }
 
-func TestPrinter_RestartAppsNoticeSuppressed(t *testing.T) {
-	for _, tt := range []struct {
-		name  string
-		level Level
-		apps  []string
-	}{
-		{name: "quiet", level: LevelQuiet, apps: []string{"claude"}},
-		{name: "no upgrades", level: LevelNormal},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			p, out, errOut := newTestPrinter(tt.level)
+func TestPrinter_RestartAppsNoticeQuiet(t *testing.T) {
+	p, out, errOut := newTestPrinter(LevelQuiet)
+	p.RestartAppsNotice([]string{"claude"})
 
-			p.RestartAppsNotice(tt.apps)
-
-			if out.Len() != 0 || errOut.Len() != 0 {
-				t.Errorf("restart notice should be suppressed; stdout=%q stderr=%q", out.String(), errOut.String())
-			}
-		})
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Errorf("quiet restart notice should print nothing; stdout=%q stderr=%q", out.String(), errOut.String())
 	}
 }
 

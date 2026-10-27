@@ -295,27 +295,25 @@ esac
 			if (runErr != nil) != (failure != "none") {
 				t.Errorf("runApply = %v, want failure %q", runErr, failure)
 			}
-			details := out
 			if failure != "none" {
-				details = errOut
 				if out != "" || !strings.Contains(errOut, failure+" failed") {
 					t.Errorf("quiet failure output = (%q, %q)", out, errOut)
 				}
-			} else if errOut != "" || !strings.Contains(out, "Summary: 1 added") {
-				t.Errorf("verbose success output = (%q, %q)", out, errOut)
+			} else if want := "+ user/tools registered and trusted\nSummary: 1 added\n"; out != want {
+				t.Errorf("verbose success stdout = %q, want %q", out, want)
 			}
 			lines := []string{"trust stdout", "trust stderr"}
 			if failure != "trust" {
 				lines = append(lines, "registration stdout", "registration stderr")
 			}
 			for _, line := range lines {
-				if !strings.Contains(details, line) {
-					t.Errorf("subprocess output missing %q: %q", line, details)
+				if !strings.Contains(errOut, line) {
+					t.Errorf("subprocess output missing %q: %q", line, errOut)
 				}
 			}
 			_, statErr := os.Stat(trustMarker)
 			if failure == "trust" {
-				if !errors.Is(statErr, os.ErrNotExist) || strings.Contains(details, "registration stdout") {
+				if !errors.Is(statErr, os.ErrNotExist) || strings.Contains(errOut, "registration stdout") {
 					t.Error("registration ran after failed trust")
 				}
 			} else if statErr != nil {
