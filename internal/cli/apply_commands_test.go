@@ -465,14 +465,19 @@ func TestRunApply_Cask_RestartNotice(t *testing.T) {
 	}
 	useBrewer(t, fake)
 
-	out := captureStdout(t, func() {
+	out, errOut := captureOutput(t, func() {
 		if err := runApply(context.Background(), layer.KindCask, nil); err != nil {
 			t.Errorf("runApply err: %v", err)
 		}
 	})
 
-	if !strings.Contains(out, "Restart these apps") || !strings.Contains(out, "claude") {
-		t.Errorf("expected restart notice with claude:\n%s", out)
+	wantOut := "↑ claude 1.0.0 → 1.1.0\nSummary: 1 upgraded\n"
+	if out != wantOut {
+		t.Errorf("cask stdout = %q, want %q", out, wantOut)
+	}
+	wantErr := "\n⚠ Restart these apps to apply upgrades\n  claude\n"
+	if errOut != wantErr {
+		t.Errorf("cask stderr = %q, want %q", errOut, wantErr)
 	}
 }
 
@@ -672,13 +677,13 @@ func TestRunApply_Cask_UpgradeFailure_NoRestartNotice(t *testing.T) {
 	fake.FailOps[brew.OpCaskUpgrade] = map[string]bool{"claude": true}
 	useBrewer(t, fake)
 
-	out := captureStdout(t, func() {
+	out, errOut := captureOutput(t, func() {
 		if err := runApply(context.Background(), layer.KindCask, nil); err == nil {
 			t.Error("expected runApply to error on cask upgrade failure")
 		}
 	})
-	if strings.Contains(out, "Restart these apps") {
-		t.Errorf("failed upgrade must not produce restart notice:\n%s", out)
+	if strings.Contains(out+errOut, "Restart these apps") {
+		t.Errorf("failed upgrade must not produce restart notice; stdout=%q stderr=%q", out, errOut)
 	}
 }
 

@@ -313,17 +313,18 @@ func (p *Printer) Footer() {
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))
 }
 
-// RestartAppsNotice prints the "restart these apps" block after cask upgrades.
+// RestartAppsNotice prints the "restart these apps" warning block to stderr
+// after cask upgrades.
 func (p *Printer) RestartAppsNotice(names []string) {
 	if len(names) == 0 || p.level == LevelQuiet {
 		return
 	}
 	if p.bodyWritten {
-		_, _ = fmt.Fprintln(p.out)
+		_, _ = fmt.Fprintln(p.err)
 	}
-	p.writeBodyOut(p.outStyles.warning("⚠") + " Restart these apps to apply upgrades")
+	p.writeBodyErr(p.errStyles.warning("⚠") + " Restart these apps to apply upgrades")
 	for _, name := range names {
-		p.writeBodyOut("  " + name)
+		p.writeBodyErr("  " + name)
 	}
 }
 

@@ -69,8 +69,8 @@ carry color. --config, --layers, and --layer are described under
 'brewkit config --help'.
 
 Command payloads go to stdout: per-entry results and the summary from the
-apply commands, lint findings, and the config report. Errors and
-transient progress go to stderr, and a failure ends with 'brewkit:
+apply commands, lint findings, and the config report. Errors, warnings,
+and transient progress go to stderr, and a failure ends with 'brewkit:
 <message>' on stderr. Color is decided per stream, and the light or
 dark palette follows COLORFGBG when set, otherwise one terminal
 background query when a colored stream and stdin are terminals, TERM

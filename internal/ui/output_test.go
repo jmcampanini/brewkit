@@ -80,6 +80,7 @@ func TestPrinter_OutputPrefixPrefixesDurableLines(t *testing.T) {
 	p := New(out, errOut, PrinterOptions{Level: LevelNormal, OutputPrefix: "  "})
 	p.Item(SymAdded, "ripgrep", "")
 	p.Error("git", "install failed", "brew error")
+	p.RestartAppsNotice([]string{"claude"})
 	p.Footer()
 
 	wantOut := "  + ripgrep\n" +
@@ -88,7 +89,10 @@ func TestPrinter_OutputPrefixPrefixesDurableLines(t *testing.T) {
 		t.Errorf("unexpected prefixed stdout:\nwant: %q\ngot:  %q", wantOut, got)
 	}
 	wantErr := "  ✗ git: install failed\n" +
-		"      brew error\n"
+		"      brew error\n" +
+		"  \n" +
+		"  ⚠ Restart these apps to apply upgrades\n" +
+		"    claude\n"
 	if got := errOut.String(); got != wantErr {
 		t.Errorf("unexpected prefixed stderr:\nwant: %q\ngot:  %q", wantErr, got)
 	}
@@ -388,20 +392,42 @@ func TestPrinter_DryRunMarker(t *testing.T) {
 }
 
 func TestPrinter_RestartAppsNotice(t *testing.T) {
-	p, out, _ := newTestPrinter(LevelNormal)
+	p, out, errOut := newTestPrinter(LevelNormal)
 	p.Item(SymUpgraded, "claude", "1.0.0 → 1.1.0")
 	p.RestartAppsNotice([]string{"chatgpt", "claude"})
 	p.Footer()
 
-	got := out.String()
-	want := "↑ claude 1.0.0 → 1.1.0\n" +
-		"\n" +
+	wantOut := "↑ claude 1.0.0 → 1.1.0\nSummary: 1 upgraded\n"
+	if got := out.String(); got != wantOut {
+		t.Errorf("stdout = %q, want %q", got, wantOut)
+	}
+	wantErr := "\n" +
 		"⚠ Restart these apps to apply upgrades\n" +
 		"  chatgpt\n" +
-		"  claude\n" +
-		"Summary: 1 upgraded\n"
-	if got != want {
-		t.Errorf("unexpected restart notice:\nwant: %q\ngot:  %q", want, got)
+		"  claude\n"
+	if got := errOut.String(); got != wantErr {
+		t.Errorf("stderr = %q, want %q", got, wantErr)
+	}
+}
+
+func TestPrinter_RestartAppsNoticeSuppressed(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		level Level
+		apps  []string
+	}{
+		{name: "quiet", level: LevelQuiet, apps: []string{"claude"}},
+		{name: "no upgrades", level: LevelNormal},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p, out, errOut := newTestPrinter(tt.level)
+
+			p.RestartAppsNotice(tt.apps)
+
+			if out.Len() != 0 || errOut.Len() != 0 {
+				t.Errorf("restart notice should be suppressed; stdout=%q stderr=%q", out.String(), errOut.String())
+			}
+		})
 	}
 }
 
@@ -494,8 +520,8 @@ func TestPrinter_CatppuccinThemes(t *testing.T) {
 			if strings.Contains(combined, "\x1b[2m") {
 				t.Fatalf("secondary text should use a palette color, not terminal faint: %q", combined)
 			}
-			if !strings.Contains(gotOut, trueColor(tt.warningRGB, "⚠")+" Restart these apps") {
-				t.Fatalf("only the warning glyph should carry the low-contrast yellow: %q", gotOut)
+			if !strings.Contains(gotErr, trueColor(tt.warningRGB, "⚠")+" Restart these apps") {
+				t.Fatalf("only the warning glyph should carry the low-contrast yellow: %q", gotErr)
 			}
 		})
 	}
@@ -521,12 +547,16 @@ func TestPrinter_UsesIndependentOutputProfiles(t *testing.T) {
 	})
 	p.Item(SymAdded, "ripgrep", "")
 	p.Error("git", "install failed", "")
+	p.RestartAppsNotice([]string{"claude"})
 
 	if strings.Contains(out.String(), "\x1b[") {
 		t.Fatalf("ASCII stdout profile should be plain: %q", out.String())
 	}
 	if !strings.Contains(errOut.String(), "\x1b[38;2;231;130;132m✗\x1b[m") {
 		t.Fatalf("truecolor stderr profile should remain colored: %q", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "\x1b[38;2;229;200;144m⚠\x1b[m Restart these apps") {
+		t.Fatalf("restart warning should use the stderr profile: %q", errOut.String())
 	}
 }
 
