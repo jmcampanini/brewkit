@@ -87,7 +87,8 @@ type Printer struct {
 	bodyWritten   bool // any non-summary line was written
 }
 
-// New builds a Printer that writes items to out and errors to errOut.
+// New builds a Printer that writes items to out and errors, warnings, and
+// verbose brew output to errOut.
 func New(out, errOut io.Writer, opts PrinterOptions) *Printer {
 	spinner := opts.Spinner
 	spinnerWidth := opts.SpinnerWidth
@@ -160,14 +161,14 @@ func (p *Printer) Notice(msg string) {
 	p.writeBodyOut(p.outStyles.symbol(SymNotice) + " " + p.outStyles.secondary(msg))
 }
 
-// Verbose is a no-op outside LevelVerbose; it indents raw brew output
-// under the most recent item.
+// Verbose is a no-op outside LevelVerbose; it indents raw brew output on
+// stderr under the most recent item.
 func (p *Printer) Verbose(content string) {
 	if p.level != LevelVerbose || strings.TrimSpace(content) == "" {
 		return
 	}
 	for _, line := range outputLines(content) {
-		p.writeBodyOut(detailIndent + p.outStyles.secondary(line))
+		p.writeBodyErr(detailIndent + p.errStyles.secondary(line))
 	}
 }
 
@@ -313,17 +314,18 @@ func (p *Printer) Footer() {
 	_, _ = fmt.Fprintln(p.out, "Summary: "+strings.Join(parts, ", "))
 }
 
-// RestartAppsNotice prints the "restart these apps" block after cask upgrades.
+// RestartAppsNotice prints the "restart these apps" warning block to stderr
+// after cask upgrades.
 func (p *Printer) RestartAppsNotice(names []string) {
 	if len(names) == 0 || p.level == LevelQuiet {
 		return
 	}
 	if p.bodyWritten {
-		_, _ = fmt.Fprintln(p.out)
+		_, _ = fmt.Fprintln(p.err)
 	}
-	p.writeBodyOut(p.outStyles.warning("⚠") + " Restart these apps to apply upgrades")
+	p.writeBodyErr(p.errStyles.warning("⚠") + " Restart these apps to apply upgrades")
 	for _, name := range names {
-		p.writeBodyOut("  " + name)
+		p.writeBodyErr("  " + name)
 	}
 }
 

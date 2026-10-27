@@ -12,11 +12,8 @@ through. Every failure ends with one line on stderr in the form
      apply run where every entry was already satisfied, every layer
      lacked the file, or no layer applied, a --dry-run preview whose
      checks all passed, 'lint' finding no violations, and --help,
-     --version, a bare 'brewkit', a help topic, or 'brewkit help
-     <command>' printing help. 'brewkit help' with an unknown topic
-     prints 'Unknown help topic' and the usage on stderr and still
-     exits 0, and 'brewkit completion' with an unknown shell prints its
-     help; both commands belong to the command library.
+     --version, a bare 'brewkit' or 'brewkit completion', a help topic,
+     or 'brewkit help <command>' printing help.
   1  Any failure other than a usage error. A --config path that is
      empty or does not exist, an unknown key or an empty dir in
      brewkit.toml, a blank or whitespace-padded env_layers entry, a
@@ -36,9 +33,11 @@ through. Every failure ends with one line on stderr in the form
   2  A usage error: an unknown command or flag, a flag without its
      value or with a value its type rejects (--color with an unknown
      mode, an empty --layer, a non-boolean --dry-run), an operand on
-     'lint', 'config', or a help topic, a second operand on an apply
-     command, or --quiet together with --verbose. brewkit fails before
-     any file is read or any program runs.
+     'lint', 'config', or a help topic, an unknown command or extra
+     operand after 'brewkit help', an unknown shell after 'brewkit
+     completion', a second operand on an apply command, or --quiet
+     together with --verbose. brewkit fails before any file is read or
+     any program runs.
 
 --quiet and --verbose change only the output, never the exit status.`)
 }

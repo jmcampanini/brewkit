@@ -79,7 +79,8 @@ brew's captured output, whatever the verbosity, and a line that is not a
 valid entry for the file kind is a failure. A final 'Summary: ...' line
 on stdout counts added, upgraded, trusted, up-to-date, skipped, and failed
 entries. --hide-unchanged omits the ✓ lines; the summary still counts
-them. --verbose adds brew's output, indented, under each changed entry.
+them. --verbose adds brew's output, indented, on stderr under each
+changed entry.
 --quiet prints only the ✗ lines and their brew output, so a successful
 quiet run prints nothing. When neither is set, stdout and stderr are
 both terminals, and TERM is neither unset nor dumb, a progress line
