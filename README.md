@@ -46,7 +46,6 @@ mise run build
 | `brewkit head` | Install the listed HEAD formulas and rebuild those whose upstream commit moved. |
 | `brewkit cask` | Install or upgrade the listed casks, including ones that auto-update. |
 | `brewkit brew ripgrep` | Apply only the listed entry named `ripgrep`. |
-| `brewkit config` | Print the configuration in effect and the derived layer order; `--provenance` adds the source of each value. |
 
 `brewkit --help`, each command's `--help`, and the help topics it lists (`brewkit help layers`, `brewkit help layer-files`, and `brewkit help exit-codes`) are the canonical reference.
 
